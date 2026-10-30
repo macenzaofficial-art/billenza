@@ -32,6 +32,7 @@ export default defineConfig({
   // resolved relative to the project root so existing public/ assets
   // and dist/ output paths keep working.
   root: path.resolve(__dirname, 'src'),
+  envDir: __dirname,
   publicDir: path.resolve(__dirname, 'public'),
   plugins: [
     react(),
