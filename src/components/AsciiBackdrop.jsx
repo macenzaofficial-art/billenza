@@ -1,10 +1,7 @@
 import { useEffect, useRef, createContext, useContext, useCallback } from 'react';
 import { background, swell } from 'asciify-engine/kit';
 
-const AsciiContext = createContext({
-  triggerPulse: () => {},
-  bg: null,
-});
+const AsciiContext = createContext(null);
 
 export const useAsciiBackground = () => useContext(AsciiContext);
 
@@ -30,6 +27,7 @@ export const asciiModalCardStyle = {
   boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.9), 0 0 50px -10px rgba(220, 249, 134, 0.18)',
   border: '1px solid rgba(255, 255, 255, 0.12)',
   overflow: 'hidden',
+  animation: 'asciiCardEnter 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards',
 };
 
 export default function AsciiBackdrop({
@@ -78,6 +76,7 @@ export default function AsciiBackdrop({
 
   const contextValue = {
     triggerPulse,
+    bgRef,
     get bg() {
       return bgRef.current;
     },
@@ -85,6 +84,18 @@ export default function AsciiBackdrop({
 
   return (
     <AsciiContext.Provider value={contextValue}>
+      <style>{`
+        @keyframes asciiCardEnter {
+          0% {
+            opacity: 0;
+            transform: scale(0.96) translateY(8px);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+      `}</style>
       <div
         ref={backdropRef}
         className={className}

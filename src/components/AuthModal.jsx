@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { signInWithEmail, signUpWithEmail, signInWithMagicLink } from '../services/authService';
-import AsciiBackdrop, { asciiModalCardStyle } from './AsciiBackdrop';
+import AsciiBackdrop, { useAsciiBackground, asciiModalCardStyle } from './AsciiBackdrop';
 import { Zap, Mail, Lock, Building, ArrowRight, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
 
 export default function AuthModal({ onAuthSuccess }) {
@@ -16,6 +16,7 @@ export default function AuthModal({ onAuthSuccess }) {
   const modalCardRef = useRef(null);
   const submitButtonRef = useRef(null);
   const bgRef = useRef(null);
+  const parentAscii = useAsciiBackground();
 
   useEffect(() => {
     try {
@@ -41,12 +42,16 @@ export default function AuthModal({ onAuthSuccess }) {
     setMessage(null);
     setLoading(true);
 
-    try {
-      if (bgRef.current?.field?.pulse) {
-        bgRef.current.field.pulse({ element: submitButtonRef.current || modalCardRef.current });
+    if (parentAscii?.triggerPulse) {
+      parentAscii.triggerPulse(submitButtonRef || modalCardRef);
+    } else {
+      try {
+        if (bgRef.current?.field?.pulse) {
+          bgRef.current.field.pulse({ element: submitButtonRef.current || modalCardRef.current });
+        }
+      } catch {
+        // Pulse animation flourish
       }
-    } catch {
-      // Pulse animation flourish
     }
 
     try {
@@ -74,16 +79,15 @@ export default function AuthModal({ onAuthSuccess }) {
     }
   };
 
-  return (
-    <AsciiBackdrop bgRef={bgRef}>
-      <div
-        ref={modalCardRef}
-        style={{
-          ...asciiModalCardStyle,
-          width: '100%',
-          maxWidth: 440,
-        }}
-      >
+  const card = (
+    <div
+      ref={modalCardRef}
+      style={{
+        ...asciiModalCardStyle,
+        width: '100%',
+        maxWidth: 440,
+      }}
+    >
         {/* Header with Billenza Brand */}
         <div style={{ padding: '2rem 2rem 1.25rem', textAlign: 'center', background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
           <div style={{
@@ -274,6 +278,11 @@ export default function AuthModal({ onAuthSuccess }) {
           </button>
         </form>
       </div>
-    </AsciiBackdrop>
   );
+
+  if (parentAscii) {
+    return card;
+  }
+
+  return <AsciiBackdrop bgRef={bgRef}>{card}</AsciiBackdrop>;
 }

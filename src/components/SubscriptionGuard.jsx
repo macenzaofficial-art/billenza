@@ -2,38 +2,42 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { getUserSubscription, signOut } from '../services/authService';
 import AuthModal from './AuthModal';
-import AsciiBackdrop, { asciiModalCardStyle } from './AsciiBackdrop';
+import AsciiBackdrop, { useAsciiBackground, asciiModalCardStyle } from './AsciiBackdrop';
 import { ShieldAlert, Zap, LogOut, RefreshCw, ExternalLink, ArrowRight } from 'lucide-react';
 
 function SubscriptionPaywall({ session, checkingSub, onVerify, onSignOut }) {
   const cardRef = useRef(null);
   const refreshBtnRef = useRef(null);
   const bgRef = useRef(null);
+  const parentAscii = useAsciiBackground();
 
   const handleRefresh = async () => {
-    try {
-      if (bgRef.current?.field?.pulse) {
-        bgRef.current.field.pulse({ element: refreshBtnRef.current || cardRef.current });
+    if (parentAscii?.triggerPulse) {
+      parentAscii.triggerPulse(refreshBtnRef || cardRef);
+    } else {
+      try {
+        if (bgRef.current?.field?.pulse) {
+          bgRef.current.field.pulse({ element: refreshBtnRef.current || cardRef.current });
+        }
+      } catch {
+        // Pulse animation flourish
       }
-    } catch {
-      // Pulse animation flourish
     }
     await onVerify();
   };
 
   const marketingUrl = import.meta.env.VITE_MARKETING_URL || 'http://localhost:3000';
 
-  return (
-    <AsciiBackdrop bgRef={bgRef}>
-      <div
-        ref={cardRef}
-        style={{
-          ...asciiModalCardStyle,
-          maxWidth: 520,
-          width: '100%',
-          textAlign: 'center',
-        }}
-      >
+  const card = (
+    <div
+      ref={cardRef}
+      style={{
+        ...asciiModalCardStyle,
+        maxWidth: 520,
+        width: '100%',
+        textAlign: 'center',
+      }}
+    >
         {/* Header */}
         <div style={{ padding: '2.5rem 2rem 1.5rem', background: '#fafafa', borderBottom: '1px solid #eee' }}>
           <div style={{
@@ -112,8 +116,13 @@ function SubscriptionPaywall({ session, checkingSub, onVerify, onSignOut }) {
           </div>
         </div>
       </div>
-    </AsciiBackdrop>
   );
+
+  if (parentAscii) {
+    return card;
+  }
+
+  return <AsciiBackdrop bgRef={bgRef}>{card}</AsciiBackdrop>;
 }
 
 export default function SubscriptionGuard({ children }) {
@@ -217,27 +226,26 @@ export default function SubscriptionGuard({ children }) {
     );
   }
 
-  // If unauthenticated or subscription check hasn't finished yet for a newly logged in user:
-  if (!session || !subChecked) {
-    return (
-      <div style={{ minHeight: '100vh', background: '#080c16' }}>
-        <AuthModal onAuthSuccess={(user) => verifySubscription(user.id)} />
-      </div>
-    );
-  }
-
   // Check if subscription is active
   const isActive = subscription?.subscription_status === 'active';
 
-  // If authenticated but without an active subscription, display the Paywall Barrier with Ascii background
-  if (!isActive) {
+  // If unauthenticated or subscription check hasn't finished yet or not active:
+  // We keep <AsciiBackdrop> mounted at this level so the ASCII background animation
+  // stays continuous and does not reset when shifting from AuthModal to SubscriptionPaywall.
+  if (!session || !subChecked || !isActive) {
     return (
-      <SubscriptionPaywall
-        session={session}
-        checkingSub={checkingSub}
-        onVerify={() => verifySubscription(session.user.id)}
-        onSignOut={() => signOut()}
-      />
+      <AsciiBackdrop>
+        {!session || !subChecked ? (
+          <AuthModal onAuthSuccess={(user) => verifySubscription(user.id)} />
+        ) : (
+          <SubscriptionPaywall
+            session={session}
+            checkingSub={checkingSub}
+            onVerify={() => verifySubscription(session.user.id)}
+            onSignOut={() => signOut()}
+          />
+        )}
+      </AsciiBackdrop>
     );
   }
 
