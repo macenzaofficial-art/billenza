@@ -382,6 +382,41 @@ export const getProfile = async () => {
   if (isSupabaseConfigured()) {
     const profiles = await getAllProfiles();
     const found = profiles.find((p) => p.isDefault) || profiles[0];
+    if (found && found.businessName) {
+      return { ...DEFAULT_PROFILE, ...found };
+    }
+
+    // Auto-heal / fallback: If no profile exists yet (e.g. user registered on landing page checkout),
+    // sync from organizations table or Supabase auth user_metadata
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        let bizName = user.user_metadata?.business_name;
+        if (!bizName) {
+          const { data: org } = await supabase
+            .from('organizations')
+            .select('business_name')
+            .eq('owner_id', user.id)
+            .maybeSingle();
+          if (org?.business_name && org.business_name !== 'My Business') {
+            bizName = org.business_name;
+          }
+        }
+        if (bizName) {
+          const initialProfile = {
+            ...(found || DEFAULT_PROFILE),
+            businessName: bizName,
+            email: user.email || '',
+            isDefault: true,
+          };
+          const saved = await saveBusinessProfile(initialProfile);
+          return { ...DEFAULT_PROFILE, ...saved };
+        }
+      }
+    } catch (e) {
+      console.warn('Could not auto-sync profile from organization/auth:', e);
+    }
+
     return found ? { ...DEFAULT_PROFILE, ...found } : { ...DEFAULT_PROFILE };
   }
   const prof = await apiFetch(`${API}/profile`);
@@ -691,10 +726,13 @@ export const getAllProfiles = async () => {
 
 export const saveBusinessProfile = async (profile) => {
   if (isSupabaseConfigured()) {
-    const id = profile.id || `prof_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    profile.id = id;
+    const isUuid = (val) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+    const id = (profile.id && isUuid(profile.id))
+      ? profile.id
+      : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined);
+    if (id) profile.id = id;
     const row = {
-      id,
+      ...(id ? { id } : {}),
       business_name: profile.businessName || 'My Business',
       gstin: profile.gstin || null,
       pan: profile.pan || null,
@@ -711,8 +749,9 @@ export const saveBusinessProfile = async (profile) => {
       is_default: Boolean(profile.isDefault),
       data: profile,
     };
-    const { error } = await supabase.from('profiles').upsert(row);
+    const { data: savedRow, error } = await supabase.from('profiles').upsert(row).select().maybeSingle();
     if (error) throw error;
+    if (savedRow?.id) profile.id = savedRow.id;
     return profile;
   }
   const res = await apiFetch(`${API}/profiles`, { method: 'POST', body: JSON.stringify(profile) });
