@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { background, swell } from 'asciify-engine/kit';
 import { signInWithEmail, signUpWithEmail, signInWithMagicLink } from '../services/authService';
+import AsciiBackdrop, { asciiModalCardStyle } from './AsciiBackdrop';
 import { Zap, Mail, Lock, Building, ArrowRight, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
 
 export default function AuthModal({ onAuthSuccess }) {
@@ -13,7 +13,6 @@ export default function AuthModal({ onAuthSuccess }) {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
 
-  const backdropRef = useRef(null);
   const modalCardRef = useRef(null);
   const submitButtonRef = useRef(null);
   const bgRef = useRef(null);
@@ -34,42 +33,6 @@ export default function AuthModal({ onAuthSuccess }) {
     } catch {
       // Ignore URL parsing errors
     }
-  }, []);
-
-  // Initialize and clean up Asciify Swell background behind AuthModal
-  useEffect(() => {
-    if (!backdropRef.current) return;
-
-    let bg = null;
-    try {
-      bg = background(backdropRef.current, {
-        preset: swell,
-        palette: '#DCF986',
-        speed: 0.8,
-        cellSize: 14,
-        opacity: 0.85,
-        mark: 'dot',
-        cursor: 'lantern',
-        look: {
-          clear: false,
-          highlight: '#F3FED0',
-        },
-      });
-      bgRef.current = bg;
-    } catch (err) {
-      console.warn('Asciify background initialization skipped or failed:', err);
-    }
-
-    return () => {
-      if (bg) {
-        try {
-          bg.destroy();
-        } catch (err) {
-          console.warn('Asciify background cleanup error:', err);
-        }
-        bgRef.current = null;
-      }
-    };
   }, []);
 
   const handleSubmit = async (e) => {
@@ -112,23 +75,13 @@ export default function AuthModal({ onAuthSuccess }) {
   };
 
   return (
-    <div
-      ref={backdropRef}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 99999,
-        background: '#080c16',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem',
-        overflowY: 'auto',
-      }}
-    >
+    <AsciiBackdrop bgRef={bgRef}>
       <div
         ref={modalCardRef}
         style={{
-          position: 'relative', zIndex: 1,
-          background: '#fff', borderRadius: 24, width: '100%', maxWidth: 440,
-          boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.9), 0 0 50px -10px rgba(220, 249, 134, 0.18)',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
-          overflow: 'hidden',
+          ...asciiModalCardStyle,
+          width: '100%',
+          maxWidth: 440,
         }}
       >
         {/* Header with Billenza Brand */}
@@ -321,6 +274,6 @@ export default function AuthModal({ onAuthSuccess }) {
           </button>
         </form>
       </div>
-    </div>
+    </AsciiBackdrop>
   );
 }
