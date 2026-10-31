@@ -210,7 +210,7 @@ export const setRegionMode = (mode) => {
   if (isSupabaseConfigured()) {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
-        supabase.from('user_preferences').upsert({ user_id: user.id, region_mode: mode }).catch(() => {});
+        supabase.from('user_preferences').upsert({ user_id: user.id, region_mode: mode }).then(() => {}, () => {});
       }
     });
   } else {
@@ -231,7 +231,7 @@ export const setEnabledModules = (map) => {
   if (isSupabaseConfigured()) {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
-        supabase.from('user_preferences').upsert({ user_id: user.id, enabled_modules: map || {} }).catch(() => {});
+        supabase.from('user_preferences').upsert({ user_id: user.id, enabled_modules: map || {} }).then(() => {}, () => {});
       }
     });
   } else {
@@ -249,9 +249,41 @@ export const getNextInvoiceNumber = async (prefix = 'INV', { peek = false, expli
 
   if (isSupabaseConfigured()) {
     try {
-      const { data: bills } = await supabase.from('bills').select('invoice_number');
-      const count = (bills || []).length;
-      next = count + start;
+      if (peek) {
+        const { data, error } = await supabase
+          .from('invoice_counters')
+          .select('value')
+          .eq('key', key)
+          .maybeSingle();
+        if (!error && data?.value != null) {
+          next = nextCounterValue(data.value, start);
+        } else {
+          next = start;
+        }
+      } else {
+        const { data, error } = await supabase.rpc('increment_counter', { key, start });
+        if (!error && data != null) {
+          next = Number(data);
+        } else {
+          const { data: row } = await supabase
+            .from('invoice_counters')
+            .select('value')
+            .eq('key', key)
+            .maybeSingle();
+          const current = row?.value != null ? Number(row.value) : null;
+          const target = nextCounterValue(current, start);
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.from('invoice_counters').upsert({
+              user_id: user.id,
+              key,
+              value: target,
+              updated_at: new Date().toISOString(),
+            });
+          }
+          next = target;
+        }
+      }
     } catch {
       next = start;
     }
@@ -314,7 +346,11 @@ export const saveBill = async (bill, { overwrite = false } = {}) => {
 
 export const getAllBills = async () => {
   if (isSupabaseConfigured()) {
-    const { data, error } = await supabase.from('bills').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('bills')
+      .select('*')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map((row) => ({ ...row.data, id: row.id, status: row.status }));
   }
@@ -323,7 +359,8 @@ export const getAllBills = async () => {
 
 export const deleteBill = async (id) => {
   if (isSupabaseConfigured()) {
-    const { error } = await supabase.from('bills').delete().eq('id', id);
+    const now = new Date().toISOString();
+    const { error } = await supabase.from('bills').update({ deleted_at: now }).eq('id', id);
     if (error) throw error;
     return { ok: true };
   }
@@ -337,9 +374,39 @@ export const triggerBackup = async () => isSupabaseConfigured() ? { ok: true } :
 export const deleteBackup = async (date) => isSupabaseConfigured() ? { ok: true } : apiFetch(`${API}/backups/${encodeURIComponent(date)}`, { method: 'DELETE' });
 export const getBackupFolder = async () => isSupabaseConfigured() ? { path: '' } : apiFetch(`${API}/backup-folder`);
 export const setBackupFolder = async (folder) => isSupabaseConfigured() ? { ok: true } : apiFetch(`${API}/backup-folder`, { method: 'POST', body: JSON.stringify({ path: folder }) });
-export const getTrashedBills = async () => isSupabaseConfigured() ? [] : apiFetch(`${API}/trash`);
-export const restoreTrashedBill = async (id) => isSupabaseConfigured() ? { ok: true } : apiFetch(`${API}/trash/${encodeURIComponent(id)}/restore`, { method: 'POST', body: JSON.stringify({}) });
-export const purgeTrashedBill = async (id) => isSupabaseConfigured() ? { ok: true } : apiFetch(`${API}/trash/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const getTrashedBills = async () => {
+  if (isSupabaseConfigured()) {
+    const { data, error } = await supabase
+      .from('bills')
+      .select('*')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((row) => ({
+      ...row.data,
+      id: row.id,
+      status: row.status,
+      _trashedAt: row.deleted_at,
+    }));
+  }
+  return apiFetch(`${API}/trash`);
+};
+export const restoreTrashedBill = async (id) => {
+  if (isSupabaseConfigured()) {
+    const { error } = await supabase.from('bills').update({ deleted_at: null }).eq('id', id);
+    if (error) throw error;
+    return { ok: true };
+  }
+  return apiFetch(`${API}/trash/${encodeURIComponent(id)}/restore`, { method: 'POST', body: JSON.stringify({}) });
+};
+export const purgeTrashedBill = async (id) => {
+  if (isSupabaseConfigured()) {
+    const { error } = await supabase.from('bills').delete().eq('id', id);
+    if (error) throw error;
+    return { ok: true };
+  }
+  return apiFetch(`${API}/trash/${encodeURIComponent(id)}`, { method: 'DELETE' });
+};
 
 // ---- Profile (Default business profile) ----
 export const DEFAULT_PROFILE = {
@@ -373,6 +440,23 @@ export const DEFAULT_PROFILE = {
 export const saveProfile = async (profile) => {
   if (isSupabaseConfigured()) {
     profile.isDefault = true;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      if (!profile.id) {
+        const { data: existingProfiles } = await supabase
+          .from('profiles')
+          .select('id, business_name, gstin')
+          .eq('user_id', user.id);
+        const match = (existingProfiles || []).find((p) =>
+          (profile.gstin && p.gstin && p.gstin.trim().toUpperCase() === profile.gstin.trim().toUpperCase()) ||
+          (p.business_name && p.business_name.trim().toLowerCase() === (profile.businessName || '').trim().toLowerCase())
+        );
+        if (match?.id) {
+          profile.id = match.id;
+        }
+      }
+      await supabase.from('profiles').update({ is_default: false }).eq('user_id', user.id);
+    }
     return saveBusinessProfile(profile);
   }
   return apiFetch(`${API}/profile`, { method: 'POST', body: JSON.stringify(profile) });
@@ -510,7 +594,13 @@ export const getAllProducts = async () => {
   if (isSupabaseConfigured()) {
     const { data, error } = await supabase.from('products').select('*').order('name');
     if (error) throw error;
-    return (data || []).map((r) => ({ ...r.data, id: r.id, name: r.name, stock: r.stock, price: r.price }));
+    return (data || []).map((r) => ({
+      ...r.data,
+      id: r.id,
+      name: r.name,
+      stock: r.stock ?? (r.data?.stock ?? null),
+      price: r.price,
+    }));
   }
   return apiFetch(`${API}/products`);
 };
@@ -519,6 +609,7 @@ export const saveProduct = async (product) => {
   if (isSupabaseConfigured()) {
     const id = product.id || `prod_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     product.id = id;
+    const stockVal = (product.stock === '' || product.stock == null) ? null : (Number(product.stock) || 0);
     const row = {
       id,
       name: product.name || 'Unnamed Product',
@@ -526,9 +617,9 @@ export const saveProduct = async (product) => {
       unit: product.unit || 'PCS',
       price: Number(product.price) || 0,
       tax_rate: Number(product.taxRate) || 18,
-      stock: Number(product.stock) || 0,
+      stock: stockVal,
       low_stock_threshold: Number(product.lowStockThreshold) || 5,
-      data: product,
+      data: { ...product, stock: stockVal },
     };
     const { error } = await supabase.from('products').upsert(row);
     if (error) throw error;
@@ -819,29 +910,47 @@ const restoreLocalStorage = (map) => {
 export const runUpdateNow = () => Promise.resolve({ ok: true, message: 'Cloud version is always up to date.' });
 
 export const exportAllData = async (selection) => {
+  const sel = selection || {
+    profile: true, profiles: true, bills: true, clients: true, products: true,
+    expenses: true, purchases: true, recurring: true, receipts: true,
+    termsTemplates: true, meta: true, localStorage: true,
+  };
+
   if (isSupabaseConfigured()) {
-    const [bills, clients, products, expenses, purchases, receipts, profiles] = await Promise.all([
-      getAllBills().catch(() => []),
-      getAllClients().catch(() => []),
-      getAllProducts().catch(() => []),
-      getAllExpenses().catch(() => []),
-      getAllPurchases().catch(() => []),
-      getAllReceipts().catch(() => []),
-      getAllProfiles().catch(() => []),
+    const [profile, profiles, bills, clients, products, expenses, purchases, recurring, receipts, termsTemplates] = await Promise.all([
+      sel.profile ? getProfile().catch(() => null) : Promise.resolve(null),
+      sel.profiles ? getAllProfiles().catch(() => []) : Promise.resolve([]),
+      sel.bills ? getAllBills().catch(() => []) : Promise.resolve([]),
+      sel.clients ? getAllClients().catch(() => []) : Promise.resolve([]),
+      sel.products ? getAllProducts().catch(() => []) : Promise.resolve([]),
+      sel.expenses ? getAllExpenses().catch(() => []) : Promise.resolve([]),
+      sel.purchases ? getAllPurchases().catch(() => []) : Promise.resolve([]),
+      sel.recurring ? getAllRecurring().catch(() => []) : Promise.resolve([]),
+      sel.receipts ? getAllReceipts().catch(() => []) : Promise.resolve([]),
+      sel.termsTemplates ? getTermsTemplates().catch(() => []) : Promise.resolve([]),
     ]);
 
     const data = {
       exportedAt: new Date().toISOString(),
       version: '2.0.0-cloud',
       __billenza_backup: true,
-      bills, clients, products, expenses, purchases, receipts, profiles,
-      localStorage: collectLocalStorage(),
     };
+    if (sel.profile && profile)             data.profile = profile;
+    if (sel.profiles && profiles?.length)   data.profiles = profiles;
+    if (sel.bills && bills?.length)         data.bills = bills;
+    if (sel.clients && clients?.length)     data.clients = clients;
+    if (sel.termsTemplates && termsTemplates?.length) data.termsTemplates = termsTemplates;
+    if (sel.products && products?.length)   data.products = products;
+    if (sel.expenses && expenses?.length)   data.expenses = expenses;
+    if (sel.recurring && recurring?.length) data.recurring = recurring;
+    if (sel.receipts && receipts?.length)   data.receipts = receipts;
+    if (sel.purchases && purchases?.length) data.purchases = purchases;
+    if (sel.localStorage)                  data.localStorage = collectLocalStorage();
+
     return JSON.stringify(data, null, 2);
   }
 
   const [all, version] = await Promise.all([apiFetch(`${API}/export`), Promise.resolve('1.10.80')]);
-  const sel = selection || { profile: true, profiles: true, bills: true, clients: true, products: true, expenses: true, purchases: true, recurring: true, receipts: true, termsTemplates: true, meta: true, localStorage: true };
 
   const data = { exportedAt: new Date().toISOString(), version, __billenza_backup: true };
   if (sel.profile)        data.profile = all.profile;
@@ -889,22 +998,102 @@ export const inspectBackup = (jsonString) => {
 export const importData = async (jsonString, selection) => {
   const inspected = typeof jsonString === 'string' ? inspectBackup(jsonString) : { raw: jsonString };
   const data = inspected.raw;
+  const sel = selection || {
+    profile: true, profiles: true, bills: true, clients: true, products: true,
+    expenses: true, purchases: true, recurring: true, receipts: true,
+    termsTemplates: true, meta: true, localStorage: true,
+  };
 
   if (isSupabaseConfigured()) {
-    if (Array.isArray(data.bills)) {
-      for (const bill of data.bills) { await saveBill(bill, { overwrite: true }); }
+    let billCount = 0;
+    let clientCount = 0;
+    let productCount = 0;
+    let expenseCount = 0;
+    let purchaseCount = 0;
+    let receiptCount = 0;
+    let recurringCount = 0;
+    let templateCount = 0;
+    let profileCount = 0;
+    let hasProfile = false;
+
+    if (sel.profile && data.profile && typeof data.profile === 'object') {
+      await saveProfile(data.profile);
+      hasProfile = true;
     }
-    if (Array.isArray(data.clients)) {
-      for (const c of data.clients) { await saveClient(c); }
+    if (sel.profiles && Array.isArray(data.profiles)) {
+      for (const bp of data.profiles) {
+        await saveBusinessProfile(bp);
+        profileCount++;
+      }
     }
-    if (Array.isArray(data.products)) {
-      for (const p of data.products) { await saveProduct(p); }
+    if (sel.bills && Array.isArray(data.bills)) {
+      for (const bill of data.bills) {
+        await saveBill(bill, { overwrite: true });
+        billCount++;
+      }
     }
-    if (data.localStorage) restoreLocalStorage(data.localStorage);
-    return { ok: true, imported: true };
+    if (sel.clients && Array.isArray(data.clients)) {
+      for (const c of data.clients) {
+        await saveClient(c);
+        clientCount++;
+      }
+    }
+    if (sel.products && Array.isArray(data.products)) {
+      for (const p of data.products) {
+        await saveProduct(p);
+        productCount++;
+      }
+    }
+    if (sel.expenses && Array.isArray(data.expenses)) {
+      for (const exp of data.expenses) {
+        await saveExpense(exp);
+        expenseCount++;
+      }
+    }
+    if (sel.purchases && Array.isArray(data.purchases)) {
+      for (const pur of data.purchases) {
+        await savePurchase(pur);
+        purchaseCount++;
+      }
+    }
+    if (sel.recurring && Array.isArray(data.recurring)) {
+      for (const rec of data.recurring) {
+        await saveRecurring(rec);
+        recurringCount++;
+      }
+    }
+    if (sel.receipts && Array.isArray(data.receipts)) {
+      for (const rcp of data.receipts) {
+        await saveReceipt(rcp);
+        receiptCount++;
+      }
+    }
+    if (sel.termsTemplates && Array.isArray(data.termsTemplates)) {
+      for (const tpl of data.termsTemplates) {
+        await saveTermsTemplate(tpl);
+        templateCount++;
+      }
+    }
+    if (sel.localStorage && data.localStorage) {
+      restoreLocalStorage(data.localStorage);
+    }
+
+    return {
+      ok: true,
+      imported: true,
+      billCount,
+      clientCount,
+      productCount,
+      expenseCount,
+      purchaseCount,
+      receiptCount,
+      recurringCount,
+      templateCount,
+      profileCount,
+      hasProfile,
+    };
   }
 
-  const sel = selection || { profile: true, profiles: true, bills: true, clients: true, products: true, expenses: true, purchases: true, recurring: true, receipts: true, termsTemplates: true, meta: true, localStorage: true };
   const payload = {};
   if (sel.profile && data.profile)               payload.profile = data.profile;
   if (sel.profiles && data.profiles)             payload.profiles = data.profiles;

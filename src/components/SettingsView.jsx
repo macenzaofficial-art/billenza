@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { isSupabaseConfigured } from '../services/supabaseClient';
 import { getProfile, saveProfile, exportAllData, importData, inspectBackup, getTermsTemplates, saveTermsTemplate, deleteTermsTemplate, getAllProfiles, saveBusinessProfile, deleteBusinessProfile, getRegionMode, setRegionMode, getEnabledModules, setEnabledModules, getStockAlertSettings, saveStockAlertSettings, renameNumberSeries, getInvoiceDisplayOptions, saveInvoiceDisplayOptions } from '../store';
 import { getCountryConfig, getStatesForCountry, validateTaxId, getCountriesForRegion, FEATURE_GROUPS, isModuleEnabled, getPaymentAccounts, createEmptyAccount, maskAccountNumber, reorderAccounts, setDefaultAccount, isValidUpiId, findSameBusiness, businessKeyOf, stockDelta } from '../utils';
 import { Save, Upload, Download, Plus, Trash2, Edit3, Image as ImageIcon, PenTool, Building2, Hash, Save as SaveIcon } from 'lucide-react';
@@ -178,9 +179,12 @@ export default function SettingsView({ onSaved }) {
   useEffect(() => {
     getProfile().then((p) => {
       if (p) {
-        setProfile(prev => ({ ...prev, ...p }));
-        // Baseline for the unsaved-changes check — what is currently on disk.
-        savedProfileRef.current = JSON.stringify(p);
+        setProfile(prev => {
+          const merged = { ...prev, ...p };
+          // Baseline for the unsaved-changes check — matches the merged form state.
+          savedProfileRef.current = JSON.stringify(merged);
+          return merged;
+        });
         setActiveBusiness(p);
       }
     }).catch(() => {}).finally(() => setProfileLoaded(true));
@@ -592,7 +596,7 @@ export default function SettingsView({ onSaved }) {
     if (!profile.businessName.trim()) { toast('Business name required', 'warning'); return; }
     // Update the saved profile of this same business, or create a new one
     const existing = sameSavedBusiness();
-    await saveBusinessProfile({ ...profile, id: existing?.id || undefined });
+    await saveBusinessProfile({ ...profile, id: existing?.id || undefined, isDefault: existing ? Boolean(existing.isDefault) : false });
     toast(existing ? 'Profile updated!' : 'Profile saved!', 'success');
     loadBusinessProfiles();
   };
@@ -601,11 +605,13 @@ export default function SettingsView({ onSaved }) {
     // Auto-save current profile before switching (so it's not lost)
     if (profile.businessName?.trim()) {
       const existing = sameSavedBusiness();
-      await saveBusinessProfile({ ...profile, id: existing?.id || undefined });
+      await saveBusinessProfile({ ...profile, id: existing?.id || undefined, isDefault: existing ? Boolean(existing.isDefault) : false });
     }
     loadedProfileId.current = bp.id;
     const loaded = { ...bp };
-    delete loaded.id;
+    if (!isSupabaseConfigured()) {
+      delete loaded.id;
+    }
     setProfile(loaded);
     await saveProfile(loaded);
     // v1.10.56 (#44) — switching profiles persists immediately, so this IS

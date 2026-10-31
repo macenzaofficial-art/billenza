@@ -347,7 +347,9 @@ function App() {
   const handleSwitchProfile = async (bp) => {
     setShowProfileMenu(false);
     const loaded = { ...bp };
-    delete loaded.id;
+    if (!isSupabaseConfigured()) {
+      delete loaded.id;
+    }
     await saveProfile(loaded);
     setProfile(loaded);
   };
@@ -550,10 +552,6 @@ function App() {
       } else if (e.key === '/') {
         e.preventDefault();
         setShowShortcutsHelp(s => !s);
-      } else if ((e.key === 'l' || e.key === 'L') && e.shiftKey) {
-        // v1.10.80 (#98) - lock now; does nothing when no PIN is set.
-        e.preventDefault();
-        getLockStatus().then((st) => { if (st?.enabled) lockNow(); }).catch(() => {});
       } else if ((e.key === 'n' || e.key === 'N') && !editable) {
         e.preventDefault();
         handleNewInvoice();
@@ -839,7 +837,7 @@ function App() {
         )}
         {/* v1.10.4 — All lazy views under one Suspense boundary. Only the
              matched view's chunk actually loads; others stay unfetched. */}
-        <ErrorBoundary onReset={() => setCurrentView('dashboard')}>
+        <ErrorBoundary key={currentView} onReset={() => setCurrentView('dashboard')}>
         <Suspense fallback={<ViewLoading />}>
         {currentView === 'clients' && (
           <ClientsView onNew={handleNewInvoice} onEdit={handleEditInvoice} onDuplicate={handleDuplicateInvoice} />
@@ -1035,7 +1033,6 @@ function App() {
                 <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>N</kbd></td><td>New invoice</td></tr>
                 <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>S</kbd></td><td>Save current invoice (when on the invoice form)</td></tr>
                 <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>P</kbd></td><td>Download PDF (when on the invoice form)</td></tr>
-                <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>Shift</kbd>&nbsp;+&nbsp;<kbd>L</kbd></td><td>Lock the app (when a PIN is set)</td></tr>
                 <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>/</kbd></td><td>Toggle this help</td></tr>
                 <tr><td><kbd>Esc</kbd></td><td>Close any open modal</td></tr>
               </tbody>
