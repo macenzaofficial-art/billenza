@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { X, ChevronRight, Check } from 'lucide-react';
 import { getPrintSettings, savePrintSettings, BUSINESS_PRESETS, applyBusinessPreset } from '../utils/printSettings';
 import { toast } from './Toast';
-import { getInvoiceDisplayOptions, saveInvoiceDisplayOptions } from '../store';
+import { getInvoiceDisplayOptions, saveInvoiceDisplayOptions, getProfile, saveProfile } from '../store';
 
 const PAPER_LABELS = { a4: 'A4', a5: 'A5', thermal80: '80mm thermal', thermal58: '58mm thermal' };
 
@@ -41,7 +41,7 @@ export default function SetupWizard({ onClose }) {
   // (see button below) until at least one choice is made, so hitting
   // Finish always writes something meaningful. skip() stays available
   // for users who genuinely want to dismiss and configure later.
-  const finish = () => {
+  const finish = async () => {
     const current = getPrintSettings();
     // v1.10.33 — Clear onboardingSkipped when the user actually
     // completes setup, so the "Finish setup" pill hides for good.
@@ -53,11 +53,19 @@ export default function SetupWizard({ onClose }) {
     if (paperSize) next.paperSize = paperSize;
     savePrintSettings(next);
     if (paperSize) setDefaultPaperSize(paperSize);
+
+    try {
+      const p = await getProfile();
+      if (p) {
+        await saveProfile({ ...p, printSettings: next });
+      }
+    } catch { /* ignore */ }
+
     toast('Setup complete! Your defaults are configured.', 'success');
     onClose();
   };
 
-  const skip = () => {
+  const skip = async () => {
     // v1.10.33 — Distinguishes "Skip" from "None of these":
     //   Skip           → onboardingComplete=true, onboardingSkipped=true
     //                    (App shows a bottom-right "Finish setup" pill)
@@ -66,7 +74,16 @@ export default function SetupWizard({ onClose }) {
     // Reported: "if user skip it should show in right side bottom so
     // they can do it again".
     const current = getPrintSettings();
-    savePrintSettings({ ...current, onboardingComplete: true, onboardingSkipped: true });
+    const next = { ...current, onboardingComplete: true, onboardingSkipped: true };
+    savePrintSettings(next);
+
+    try {
+      const p = await getProfile();
+      if (p) {
+        await saveProfile({ ...p, printSettings: next });
+      }
+    } catch { /* ignore */ }
+
     toast('Setup skipped — use the "Finish setup" pill to come back to it.', 'info');
     onClose();
   };

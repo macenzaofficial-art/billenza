@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Building2, FileText, BarChart3, Shield, ChevronRight, ChevronLeft, Check, ArrowRight, Image, PenTool } from 'lucide-react';
 import { saveProfile, setRegionMode } from '../store';
 import { getStatesForCountry, getCountryConfig, detectCountryFromBrowser, createEmptyAccount } from '../utils';
+import { isSupabaseConfigured } from '../services/supabaseClient';
 import { toast } from './Toast';
 
 const STEPS = [
@@ -11,15 +12,33 @@ const STEPS = [
   { id: 'ready', title: 'You\'re All Set!', icon: BarChart3 },
 ];
 
-export default function WelcomeGuide({ onComplete }) {
+export default function WelcomeGuide({ onComplete, initialProfile }) {
   const [step, setStep] = useState(0);
   // v1.10.74 - region starts as India (below), so the country must too; the
   // browser country is only used when "Outside India" is picked.
-  const [profile, setProfile] = useState({
-    businessName: '', address: '', city: '', pin: '', state: '', country: 'India', gstin: '', pan: '',
-    email: '', phone: '', bankName: '', accountNumber: '', ifsc: '', swift: '',
-    logo: '', signature: '', upiId: '', googleClientId: '', googleDriveFolder: 'GST Billing Invoices',
-  });
+  const [profile, setProfile] = useState(() => ({
+    businessName: initialProfile?.businessName && initialProfile.businessName !== 'My Business'
+      ? initialProfile.businessName
+      : (initialProfile?.businessName || ''),
+    address: initialProfile?.address || '',
+    city: initialProfile?.city || '',
+    pin: initialProfile?.pincode || initialProfile?.pin || '',
+    state: initialProfile?.state || '',
+    country: initialProfile?.country || 'India',
+    gstin: initialProfile?.gstin || '',
+    pan: initialProfile?.pan || '',
+    email: initialProfile?.email || '',
+    phone: initialProfile?.phone || '',
+    bankName: initialProfile?.bankDetails?.bankName || initialProfile?.bankName || '',
+    accountNumber: initialProfile?.bankDetails?.accountNumber || initialProfile?.accountNumber || '',
+    ifsc: initialProfile?.bankDetails?.ifsc || initialProfile?.ifsc || '',
+    swift: initialProfile?.bankDetails?.swift || initialProfile?.swift || '',
+    logo: initialProfile?.logo || '',
+    signature: initialProfile?.signature || '',
+    upiId: initialProfile?.bankDetails?.upiId || initialProfile?.upiId || '',
+    googleClientId: initialProfile?.googleClientId || '',
+    googleDriveFolder: initialProfile?.googleDriveFolder || 'GST Billing Invoices',
+  }));
   // v1.10.67 (#66 item 2, @sangwanmail-eng) — this is an India-first GST app,
   // so India is the default. It used to be chosen from the browser locale, and
   // a Windows set to en-US started people on "Outside India" with a United
@@ -61,6 +80,7 @@ export default function WelcomeGuide({ onComplete }) {
       // add one later in Settings.
       const hasBank = profile.bankName || profile.accountNumber || profile.ifsc || profile.swift || profile.upiId;
       const profileToSave = hasBank ? {
+        ...(initialProfile || {}),
         ...profile,
         paymentAccounts: [{
           ...createEmptyAccount(profile.bankName || 'Default account'),
@@ -72,19 +92,37 @@ export default function WelcomeGuide({ onComplete }) {
           isDefault: true,
           isActive: true,
         }],
-      } : profile;
-      await saveProfile(profileToSave);
+      } : {
+        ...(initialProfile || {}),
+        ...profile,
+      };
+      profileToSave.onboarded = true;
+      const saved = await saveProfile(profileToSave);
+      const userId = profileToSave.userId || profileToSave.user_id || initialProfile?.userId || initialProfile?.user_id;
+      if (userId) {
+        localStorage.setItem(`billenza_onboarded_${userId}`, 'true');
+      }
       localStorage.setItem('freegstbill_onboarded', 'true');
+      localStorage.setItem('billenza_onboarded', 'true');
       toast('Setup complete! Start creating invoices.', 'success');
-      onComplete(profileToSave);
+      onComplete(saved || profileToSave);
     } catch {
       toast('Failed to save. Try again.', 'error');
     }
     setSaving(false);
   };
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
+    try {
+      const current = { ...(initialProfile || profile), onboarded: true };
+      await saveProfile(current);
+      const userId = current.userId || current.user_id || initialProfile?.userId || initialProfile?.user_id;
+      if (userId) {
+        localStorage.setItem(`billenza_onboarded_${userId}`, 'true');
+      }
+    } catch { /* ignore */ }
     localStorage.setItem('freegstbill_onboarded', 'true');
+    localStorage.setItem('billenza_onboarded', 'true');
     onComplete(null);
   };
 
@@ -320,7 +358,13 @@ export default function WelcomeGuide({ onComplete }) {
 
               <div style={{ padding: '1rem', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  All your data is stored locally in the <code style={{ background: 'var(--border-color)', padding: '0.1rem 0.3rem', borderRadius: '3px' }}>data/</code> folder on this computer. Nothing is sent to any server. You can export a full backup anytime from Settings.
+                  {isSupabaseConfigured() ? (
+                    'All your business data is securely stored in your cloud workspace with real-time PostgreSQL persistence and automatic backups. You can export a full backup anytime from Settings.'
+                  ) : (
+                    <>
+                      All your data is stored locally in the <code style={{ background: 'var(--border-color)', padding: '0.1rem 0.3rem', borderRadius: '3px' }}>data/</code> folder on this computer. Nothing is sent to any server. You can export a full backup anytime from Settings.
+                    </>
+                  )}
                 </div>
               </div>
             </div>

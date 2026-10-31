@@ -49,6 +49,7 @@ export const signUpWithEmail = async (email, password, businessName = '', planTi
           businessName: businessName || 'My Business',
           email: email || '',
           isDefault: true,
+          onboarded: false,
         },
       });
     } catch (e) {
@@ -73,8 +74,28 @@ export const signInWithMagicLink = async (email) => {
 
 export const signOut = async () => {
   if (!isSupabaseConfigured()) return;
+  try {
+    const keysToRemove = [
+      'freegstbill_onboarded',
+      'billenza_onboarded',
+      'gst_editingBill',
+      'gst_currentView',
+      'gst_printSettings',
+    ];
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key);
+    }
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('billenza_onboarded_') || k.startsWith('gst_printSettings_'))) {
+        localStorage.removeItem(k);
+      }
+    }
+  } catch { /* ignore */ }
+
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
+  window.location.href = '/';
 };
 
 export const getUserSubscription = async (userId) => {

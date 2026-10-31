@@ -719,7 +719,7 @@ export const getAllProfiles = async () => {
   if (isSupabaseConfigured()) {
     const { data, error } = await supabase.from('profiles').select('*').order('created_at');
     if (error) throw error;
-    return (data || []).map((r) => ({ ...r.data, id: r.id }));
+    return (data || []).map((r) => ({ businessName: r.business_name || '', ...r.data, id: r.id, userId: r.user_id }));
   }
   return apiFetch(`${API}/profiles`);
 };

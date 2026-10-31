@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { Home, FileText, Settings, Plus, Users, Package, BarChart3, Wallet, RefreshCw, Receipt, BookOpen, Moon, Sun, Download, X, ShoppingCart, ChevronDown, Building2, Pencil, HelpCircle, Search, Command, Bell, Calculator, Menu, Info, LogOut } from 'lucide-react';
 import { signOut } from './services/authService';
-import { isSupabaseConfigured } from './services/supabaseClient';
+import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import { getAllProfiles, saveProfile, getEnabledModules, getAllBills, getAllProducts, getStockAlertSettings, getAllClients, getProfile } from './store';
 import { isModuleEnabled, getUpcomingFilings, countsAsSales, localToday, toLocalIsoDate } from './utils';
 // v1.10.4 — Route-level lazy loading. Prior App.jsx synchronously
@@ -37,7 +37,7 @@ const PurchaseBills = lazy(() => import('./components/PurchaseBills'));
 const AboutView = lazy(() => import('./components/AboutView'));
 import AppFooter from './components/AppFooter';
 import ErrorBoundary from './components/ErrorBoundary';
-import { getPrintSettings } from './utils/printSettings';
+import { getPrintSettings, savePrintSettings } from './utils/printSettings';
 
 // v1.10.4 — Lightweight Suspense fallback shown while a lazy view
 // downloads. Purely visual — no data fetching, no state.
@@ -251,8 +251,50 @@ function App() {
         profileLoaded.current = true;
         setProfile(p);
         setServerStatus('online');
-        if (!p.businessName && !localStorage.getItem('billenza_onboarded') && !localStorage.getItem('freegstbill_onboarded')) {
+
+        // Determine if user has already completed onboarding
+        let userId = p?.userId || p?.user_id;
+        if (!userId && isSupabaseConfigured()) {
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user?.id) userId = user.id;
+          } catch { /* ignore */ }
+        }
+
+        const isUserOnboarded = (() => {
+          if (!p) return false;
+          // Explicit profile flag
+          if (p.onboarded === true || p.onboardingComplete === true) return true;
+          // User-scoped localStorage flag
+          if (userId && localStorage.getItem(`billenza_onboarded_${userId}`) === 'true') return true;
+          // Standalone / offline mode flag
+          if (!isSupabaseConfigured()) {
+            if (localStorage.getItem('billenza_onboarded') === 'true' || localStorage.getItem('freegstbill_onboarded') === 'true') {
+              return true;
+            }
+          }
+          // Legacy account auto-detection: if the user already has real business details filled
+          const hasGstin = Boolean(p.gstin && p.gstin.trim());
+          const hasAddress = Boolean(p.address && p.address.trim());
+          const hasPhone = Boolean(p.phone && p.phone.trim());
+          const hasBank = Boolean(p.bankDetails && (p.bankDetails.bankName || p.bankDetails.accountNumber || p.bankDetails.upiId));
+          if (hasGstin || hasAddress || hasPhone || hasBank) {
+            return true;
+          }
+          return false;
+        })();
+
+        if (!isUserOnboarded) {
           setShowWelcome(true);
+          const currentPs = getPrintSettings();
+          if (currentPs.onboardingComplete) {
+            savePrintSettings({ ...currentPs, onboardingComplete: false, onboardingSkipped: false });
+          }
+        } else {
+          // If already onboarded and profile has custom print settings, sync them
+          if (p.printSettings) {
+            savePrintSettings(p.printSettings);
+          }
         }
       } catch (err) {
         if (cancelled) return;
@@ -592,10 +634,19 @@ function App() {
   if (showWelcome) {
     return (
       <>
-        <WelcomeGuide onComplete={(p) => {
-          if (p) setProfile(p);
-          setShowWelcome(false);
-        }} />
+        <WelcomeGuide
+          initialProfile={profile}
+          onComplete={(p) => {
+            if (p) setProfile(p);
+            setShowWelcome(false);
+            try {
+              const ps = getPrintSettings();
+              if (!ps.onboardingComplete) {
+                setShowWizard(true);
+              }
+            } catch { /* ignore */ }
+          }}
+        />
         <ToastContainer />
         <ConfirmModalContainer />
       </>

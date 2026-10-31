@@ -13,6 +13,8 @@
 // data folder (data/local-prefs.json, server.js /api/local-prefs) is restored
 // before the app first renders, for keys the browser no longer has.
 
+import { isSupabaseConfigured } from '../services/supabaseClient';
+
 const MIRRORED = /^(gst_printSettings|gst_regionMode|gst_enabledModules|gst_customUnits|gst_dashboardColumns|gst_filing_status(_.*)?|gst_itr[A-Za-z]*|freegstbill_onboarded|freegstbill_theme|freegstbill_startedDismissed|freegstbill_supportNudge|freegstbill_starBanner|freegstbill_sidebarAutoHide)$/;
 const ENDPOINT = '/api/local-prefs';
 
@@ -29,7 +31,12 @@ export async function restorePrefs() {
     if (!res.ok) return false;
     const { value } = await res.json();
     for (const [k, v] of Object.entries(value || {})) {
-      if (isMirrored(k) && typeof v === 'string' && localStorage.getItem(k) === null) localStorage.setItem(k, v);
+      if (isMirrored(k) && typeof v === 'string' && localStorage.getItem(k) === null) {
+        if (isSupabaseConfigured() && (k === 'freegstbill_onboarded' || k === 'billenza_onboarded')) {
+          continue;
+        }
+        localStorage.setItem(k, v);
+      }
     }
     return true;
   } catch {
