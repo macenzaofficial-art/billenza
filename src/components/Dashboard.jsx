@@ -5,11 +5,9 @@ import { getAllBills, saveBill, getAllProducts, applyStockChanges, getProfile, g
 import { formatCurrency, INVOICE_TYPES, getFYOptions, numberToWords, belongsToProfile, salesSign, isCancelledBill, markPaidPatch, markUnpaidPatch, stockEffect, appliedStock, stockDelta, SALES_INVOICE_TYPES, localToday, amountDue, paymentStatusFor } from '../utils';
 import { openWhatsAppShare } from '../utils/share';
 import PageHeader from './PageHeader';
-import LockButton from './LockButton';
 import ActionsMenu from './ActionsMenu';
 import BulkCsvImport from './BulkCsvImport';
 import PrintPreviewModal from './PrintPreviewModal';
-import SupportNudge from './SupportNudge';
 import { toast } from './Toast';
 import { confirmAction } from './ConfirmModal';
 
@@ -201,7 +199,7 @@ function ReceiptModal({ target, onClose }) {
   );
 }
 
-export default function Dashboard({ onNew, onEdit, onPrint, onDuplicate, onConvert, onOpenProducts, onOpenSettings, onOpenGuide, onOpenSupport, activeProfile }) {
+export default function Dashboard({ onNew, onEdit, onPrint, onDuplicate, onConvert, onOpenProducts, onOpenSettings, activeProfile }) {
   // v1.10.64 — requested (#55, @sangwanmail-eng): "An invoice belonging to one
   // company should not appear under the other."
   //
@@ -1232,7 +1230,6 @@ export default function Dashboard({ onNew, onEdit, onPrint, onDuplicate, onConve
             <li><strong>Low-stock alert</strong> — appears when any product is at or below your threshold (Settings → Stock alert).</li>
           </ul>
         </HelpButton>
-        <LockButton />
         <BulkCsvImport kind="sales" onDone={loadBills} />
         <button className="btn btn-primary" onClick={onNew}><Plus size={18} /> New Invoice</button>
       </PageHeader>
@@ -1273,17 +1270,8 @@ export default function Dashboard({ onNew, onEdit, onPrint, onDuplicate, onConve
               )}
             </div>
           ))}
-          <div style={{ marginTop: '0.9rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            New to this?{' '}
-            <button type="button" onClick={onOpenGuide}
-              style={{ background: 'none', border: 0, padding: 0, font: 'inherit', color: 'var(--primary)', textDecoration: 'underline', cursor: 'pointer' }}>
-              Read the 5-minute guide
-            </button>
-          </div>
         </div>
       )}
-
-      {!startedSteps && onOpenSupport && <SupportNudge invoiceCount={bills.length} onOpen={onOpenSupport} />}
 
       {overdueBills.length > 0 && (
         <div className="overdue-banner" onClick={() => { setStatusFilter('overdue'); }}

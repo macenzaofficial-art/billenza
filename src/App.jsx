@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
-import { Home, FileText, Settings, Plus, Users, Package, BarChart3, Wallet, RefreshCw, Receipt, BookOpen, Moon, Sun, Download, X, ShoppingCart, ChevronDown, Building2, Pencil, HelpCircle, Search, Command, Bell, Calculator, HardDrive, Menu, Heart, LogOut } from 'lucide-react';
+import { Home, FileText, Settings, Plus, Users, Package, BarChart3, Wallet, RefreshCw, Receipt, BookOpen, Moon, Sun, Download, X, ShoppingCart, ChevronDown, Building2, Pencil, HelpCircle, Search, Command, Bell, Calculator, Menu, Info, LogOut } from 'lucide-react';
 import { signOut } from './services/authService';
 import { isSupabaseConfigured } from './services/supabaseClient';
-import { getAllProfiles, saveProfile, getEnabledModules, getAllBills, getAllProducts, getStockAlertSettings, getAllClients, runUpdateNow, getLockStatus } from './store';
-import { isModuleEnabled, getUpcomingFilings, countsAsSales, localToday, toLocalIsoDate, DOCS_URL } from './utils';
+import { getAllProfiles, saveProfile, getEnabledModules, getAllBills, getAllProducts, getStockAlertSettings, getAllClients, getProfile } from './store';
+import { isModuleEnabled, getUpcomingFilings, countsAsSales, localToday, toLocalIsoDate } from './utils';
 // v1.10.4 — Route-level lazy loading. Prior App.jsx synchronously
 // imported all 12 views (~15k LOC combined), so a first-paint on
 // Dashboard downloaded and parsed GSTReturns (1952), InvoiceGenerator
@@ -34,16 +34,10 @@ const ReceiptVoucher = lazy(() => import('./components/ReceiptVoucher'));
 const GSTReturns = lazy(() => import('./components/GSTReturns'));
 const IncomeTax = lazy(() => import('./components/IncomeTax'));
 const PurchaseBills = lazy(() => import('./components/PurchaseBills'));
-const ControlPanel = lazy(() => import('./components/ControlPanel'));
-const SupportView = lazy(() => import('./components/SupportView'));
-import StarBanner from './components/StarBanner';
+const AboutView = lazy(() => import('./components/AboutView'));
 import AppFooter from './components/AppFooter';
 import ErrorBoundary from './components/ErrorBoundary';
-import LockButton from './components/LockButton';
-import { lockNow } from './utils/appLock';
 import { getPrintSettings } from './utils/printSettings';
-
-const openDocs = () => window.open(DOCS_URL, '_blank', 'noopener,noreferrer');
 
 // v1.10.4 — Lightweight Suspense fallback shown while a lazy view
 // downloads. Purely visual — no data fetching, no state.
@@ -74,18 +68,14 @@ function App() {
     try {
       const params = new URLSearchParams(window.location.search);
       const v = params.get('view');
-      // v1.10.74 - 'controlpanel' added so ?view=controlpanel deep links work too.
-      const valid = ['dashboard', 'new', 'clients', 'inventory', 'expenses', 'purchases', 'recurring', 'receipts', 'reports', 'filing', 'incometax', 'settings', 'controlpanel', 'support'];
+      const valid = ['dashboard', 'new', 'clients', 'inventory', 'expenses', 'purchases', 'recurring', 'receipts', 'reports', 'filing', 'incometax', 'settings', 'support', 'about'];
       if (v && valid.includes(v)) {
-        // Strip the query string so a refresh doesn't keep snapping back to
-        // the shortcut target — only the *first* navigation honours it.
         window.history.replaceState({}, '', window.location.pathname);
         return v;
       }
     } catch { /* sandboxed history API — fall through */ }
-    // 'guide' was the built-in User Guide (removed in v1.10.75).
     const last = sessionStorage.getItem('gst_currentView');
-    return last && last !== 'guide' ? last : 'dashboard';
+    return last && last !== 'guide' && last !== 'controlpanel' ? last : 'dashboard';
   });
   const [profile, setProfile] = useState(null);
   const [editingBill, setEditingBill] = useState(() => {
@@ -98,10 +88,6 @@ function App() {
     return localStorage.getItem('freegstbill_theme') === 'dark';
   });
   const [showWelcome, setShowWelcome] = useState(false);
-  const [showInstallBanner, setShowInstallBanner] = useState(false);
-  const [serverDown, setServerDown] = useState(false);
-  const deferredPrompt = useRef(null);
-  const retryTimer = useRef(null);
 
   const [serverStatus, setServerStatus] = useState('checking'); // 'checking' | 'online' | 'offline'
   const profileLoaded = useRef(false);
@@ -109,30 +95,7 @@ function App() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef(null);
 
-  // Update notification state. Auto-checks GitHub on mount + every 6h.
-  // The user can dismiss a specific version (stored in localStorage) so the
-  // banner doesn't keep nagging once they've seen it. A NEW version released
-  // after that dismissal will re-show the banner.
-  const [updateInfo, setUpdateInfo] = useState(null);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const updateBannerVisible = updateInfo?.updateAvailable
-    && localStorage.getItem('freegstbill_dismissedUpdate') !== updateInfo.latest;
 
-  useEffect(() => {
-    let cancelled = false;
-    const check = async () => {
-      try {
-        const res = await fetch('/api/check-update');
-        const data = await res.json();
-        if (!cancelled) setUpdateInfo(data);
-      } catch { /* offline — quietly skip */ }
-    };
-    // First check ~5 seconds after mount so it doesn't fight the initial load.
-    const initial = setTimeout(check, 5000);
-    // Then re-check every 6 hours while the app is open.
-    const interval = setInterval(check, 6 * 60 * 60 * 1000);
-    return () => { cancelled = true; clearTimeout(initial); clearInterval(interval); };
-  }, []);
 
   // ---- Notification centre ----
   // Computed from server data on app boot + every 10 minutes; tucked under a
@@ -278,102 +241,27 @@ function App() {
   // throw "Cannot access 'X' before initialization" at render time because
   // useMemo's dependency array is evaluated synchronously every render.
 
-  // v1.10.69 - see runUpdateNow() in store.js for why this is no longer a link.
-  const [updating, setUpdating] = useState(false);
-  const handleUpdateNow = async () => {
-    setUpdating(true);
-    toast('Updating… your data is backed up first. This takes about a minute.', 'info', 8000);
-    const result = await runUpdateNow();
-    setUpdating(false);
-    if (result.ok) {
-      setShowUpdateModal(false);
-      toast('Update finished. Reload the page to use the new version.', 'success', 10000);
-    } else {
-      toast(`Update failed — ${result.error}`, 'error', 10000);
-    }
-  };
-
-  const dismissUpdate = () => {
-    if (updateInfo?.latest) {
-      localStorage.setItem('freegstbill_dismissedUpdate', updateInfo.latest);
-      // v1.10.6 — audit L10: was `setUpdateInfo(prev => prev ? { ...prev }
-      // : prev)` "to trigger re-render". No-op — `setShowUpdateModal(false)`
-      // below already re-renders, and `updateBannerVisible` reads
-      // localStorage every render so the new dismissal is picked up.
-    }
-    setShowUpdateModal(false);
-  };
-
-  // Check if server is running — continuously monitors
+  // Load business profile and initialize session
   useEffect(() => {
     let cancelled = false;
-    // v1.10.73 - a busy or older PC can take a few seconds to answer. One
-    // slow reply used to replace the whole app with "Needs a Quick Start"
-    // mid-invoice. Once the app has loaded, it now takes 3 missed checks in a
-    // row (about 15 s) before saying the app is not running; before the first
-    // load it still says so straight away.
-    let misses = 0;
-
-    const checkServer = async () => {
+    const initProfile = async () => {
       try {
-        const res = await fetch('/api/profile', { signal: AbortSignal.timeout(8000) });
-        if (res.ok) {
-          if (cancelled) return;
-          misses = 0;
-          setServerDown(false);
-          setServerStatus('online');
-          if (!profileLoaded.current) {
-            profileLoaded.current = true;
-            const p = await res.json();
-            setProfile(p);
-            if (!p.businessName && !localStorage.getItem('freegstbill_onboarded')) {
-              setShowWelcome(true);
-            }
-          }
-          return;
-        }
-        throw new Error('not ok');
-      } catch {
+        const p = await getProfile();
         if (cancelled) return;
-        misses += 1;
-        if (!profileLoaded.current || misses >= 3) {
-          setServerDown(true);
-          setServerStatus('offline');
+        profileLoaded.current = true;
+        setProfile(p);
+        setServerStatus('online');
+        if (!p.businessName && !localStorage.getItem('billenza_onboarded') && !localStorage.getItem('freegstbill_onboarded')) {
+          setShowWelcome(true);
         }
+      } catch (err) {
+        if (cancelled) return;
+        console.error('[Billenza] Error loading profile:', err);
+        setServerStatus(isSupabaseConfigured() ? 'online' : 'offline');
       }
     };
-
-    checkServer();
-    // Keep checking every 5 seconds (fast when down, normal heartbeat when up)
-    retryTimer.current = setInterval(checkServer, 5000);
-
-    return () => {
-      cancelled = true;
-      if (retryTimer.current) clearInterval(retryTimer.current);
-    };
-  }, []);
-
-  // Capture PWA install prompt. Banner re-appears 14 days after dismissal
-  // (was: dismissed forever — too aggressive, users who closed it during
-  // a busy moment never saw it again).
-  useEffect(() => {
-    const dismissedAt = localStorage.getItem('freegstbill_pwa_dismissed_at');
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-      || window.navigator.standalone === true; // iOS Safari
-    if (isStandalone) return;
-    // 14-day cool-down on dismissal
-    if (dismissedAt) {
-      const days = (Date.now() - Number(dismissedAt)) / 86400000;
-      if (days < 14) return;
-    }
-
-    const handler = (e) => {
-      e.preventDefault();
-      deferredPrompt.current = e;
-      setShowInstallBanner(true);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    initProfile();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -483,25 +371,6 @@ function App() {
     setCurrentView('new');
   };
 
-  const handleInstallPWA = async () => {
-    if (!deferredPrompt.current) return;
-    deferredPrompt.current.prompt();
-    const result = await deferredPrompt.current.userChoice;
-    if (result.outcome === 'accepted') {
-      setShowInstallBanner(false);
-    }
-    deferredPrompt.current = null;
-  };
-
-  const dismissInstallBanner = () => {
-    setShowInstallBanner(false);
-    // Timestamp-based dismissal — the 14-day cool-down in the install-prompt
-    // effect uses this to decide whether to re-show. Old boolean key kept for
-    // back-compat with v1.6.0 — readers that find only the legacy key treat
-    // it as "permanently dismissed" (same as today's behaviour for them).
-    localStorage.setItem('freegstbill_pwa_dismissed_at', String(Date.now()));
-  };
-
   const handleConvertToInvoice = (bill) => {
     setEditorKey((k) => k + 1);
     sessionStorage.removeItem('gst_invoiceDraft');
@@ -540,9 +409,6 @@ function App() {
     { id: 'reports', icon: BarChart3, label: 'Reports', module: 'reports' },
     { id: 'filing', icon: BookOpen, label: 'GST Returns', module: 'gstReturns' },
     { id: 'incometax', icon: Calculator, label: 'Income Tax', module: 'incomeTax' },
-    // v1.10.75 - opens the online documentation, which covers every screen
-    // and stays current; the old built-in guide had fallen far behind.
-    { id: 'guide', icon: HelpCircle, label: 'User Guide', module: 'dashboard', onClick: openDocs }, // gated by dashboard so it's always available
   ].filter(item => showIfModule(item.module));
 
   // Command palette actions — declared here (not earlier) because the deps
@@ -558,14 +424,9 @@ function App() {
       acts.push({ label: `Go to ${item.label}`, hint: '', category: 'nav', run: item.onClick || (() => setCurrentView(item.id)) });
     });
     acts.push({ label: 'Go to Settings', hint: '', category: 'nav', run: () => setCurrentView('settings') });
-    // v1.10.74 - Control Panel has its own sidebar button but was missing here.
-    acts.push({ label: 'Go to Control Panel', hint: '', category: 'nav', run: () => setCurrentView('controlpanel') });
-    acts.push({ label: 'Go to Support & About', hint: '', category: 'nav', run: () => setCurrentView('support') });
+    acts.push({ label: 'Go to About Billenza', hint: '', category: 'nav', run: () => setCurrentView('about') });
     acts.push({ label: 'Toggle dark mode', hint: '', category: 'action', run: () => setDarkMode(d => !d) });
     acts.push({ label: 'Show keyboard shortcuts', hint: 'Ctrl+/', category: 'help', run: () => setShowShortcutsHelp(true) });
-    if (updateInfo?.updateAvailable) {
-      acts.push({ label: `View update — v${updateInfo.latest}`, hint: '', category: 'update', run: () => setShowUpdateModal(true) });
-    }
     // v1.9.4 — cross-app search: invoices, clients, products
     // v1.10.5 — audit H24 fix. Prior code dispatched
     // `CustomEvent('fgsb-open-bill', { detail: b.id })` but no one
@@ -619,13 +480,13 @@ function App() {
       ['Watermarks', 'section-print'], ['Multi-copy print', 'section-print'],
       ['Digital signature', 'section-company'], ['Company letterhead', 'section-print'],
       ['Modules', 'section-modules'], ['Region preference', 'section-region'],
-      ['Google Drive backup', 'section-cloud'], ['App updates', 'section-updates'],
+      ['Data Management', 'section-data'],
     ];
     settingsJumps.forEach(([s, sectionId]) => {
       acts.push({ label: `⚙️ Settings → ${s}`, hint: '', category: 'settings', run: () => openSettingsAt(sectionId) });
     });
     return acts;
-  }, [navItems, updateInfo, handleNewInvoice, searchCorpus]);
+  }, [navItems, handleNewInvoice, searchCorpus]);
 
   const filteredPalette = paletteActions.filter(a =>
     !paletteQuery.trim() || a.label.toLowerCase().includes(paletteQuery.toLowerCase())
@@ -727,41 +588,6 @@ function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [showPalette, paletteIdx, filteredPalette]);
-
-  if (serverDown) {
-    return (
-      <div className="server-down-overlay">
-        <div className="server-down-modal">
-          <FileText size={48} color="#3b82f6" />
-          <h2>Free GST Billing Software Needs a Quick Start</h2>
-          <p>
-            Your data is <strong>100% safe</strong> on your computer — nothing is lost.
-            The app just needs to be started once.
-          </p>
-          {/* v1.10.69 - there was an "Open GST Billing" button here, linking to
-              freegstbill://start. Only the old Install FreeGSTBill.bat ever
-              registered that protocol, and it stopped shipping in v1.10.44, so
-              on every current install the button did nothing at all. There is
-              also nothing it could do: a web page cannot start a program, and
-              this screen is being served from the offline cache precisely
-              because the server is not running. The steps below are the only
-              real answer, so they are no longer the fallback. See ERR-019. */}
-          <div className="server-down-steps">
-            <p className="server-down-hint">How to start it:</p>
-            <ol>
-              <li>Double-click <strong>Free GST Billing</strong> on your Desktop, then click <strong>Open App</strong></li>
-              <li>Or search <strong>"Free GST Billing"</strong> in the Start Menu</li>
-            </ol>
-          </div>
-          <p className="server-down-safe">All your invoices, clients, and data are safely stored on your computer. They are never deleted or shared.</p>
-          <div className="server-down-waiting">
-            <div className="server-down-spinner" />
-            <span>Starting... this page will open automatically.</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   if (showWelcome) {
     return (
@@ -889,33 +715,6 @@ function App() {
             </button>
           ))}
           <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            {/* Update-available banner — only shows when GitHub has a newer version
-                AND the user hasn't already dismissed THIS specific version. New
-                releases re-show the banner. Click to view notes + update. */}
-            {updateBannerVisible && (
-              <button
-                className="nav-btn"
-                onClick={() => setShowUpdateModal(true)}
-                title={`v${updateInfo.latest} is available`}
-                style={{
-                  background: 'var(--info-bg)',
-                  borderColor: 'var(--info-border)',
-                  color: 'var(--info-text)',
-                  fontWeight: 600,
-                  position: 'relative',
-                }}
-              >
-                <Download size={18} />
-                <span style={{ flex: 1, textAlign: 'left' }}>
-                  Update to v{updateInfo.latest}
-                </span>
-                <span style={{
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: '#f59e0b', boxShadow: '0 0 0 3px rgba(245,158,11,0.25)',
-                  flexShrink: 0,
-                }} />
-              </button>
-            )}
             {/* Notification bell — opens a popover listing overdue / due-soon
                 invoices, GST filing deadlines, and low-stock items. Each row
                 is a single click away from the page that fixes it. */}
@@ -937,8 +736,6 @@ function App() {
                 }}>{notifTotal > 99 ? '99+' : notifTotal}</span>
               )}
             </button>
-            {/* v1.10.80 (#98) - only when a PIN is set. */}
-            <LockButton className="nav-btn" label="Lock app" />
             <button
               className="nav-btn"
               onClick={() => setDarkMode(!darkMode)}
@@ -948,32 +745,17 @@ function App() {
               {darkMode ? 'Light Mode' : 'Dark Mode'}
             </button>
             <button
-              className={`nav-btn nav-btn-support${currentView === 'support' ? ' nav-btn-support-active' : ''}`}
-              onClick={() => setCurrentView('support')}
-              title="Who makes this app, and how to help"
+              className={`nav-btn${(currentView === 'support' || currentView === 'about') ? ' nav-btn-active' : ''}`}
+              onClick={() => setCurrentView('about')}
+              title="About Billenza & Credits"
             >
-              <Heart size={18} /> Support &amp; About
-            </button>
-            <button
-              className={`nav-btn ${currentView === 'controlpanel' ? 'nav-btn-active' : ''}`}
-              onClick={() => setCurrentView('controlpanel')}
-              title="Update, backup, restore, move to another PC"
-            >
-              <HardDrive size={18} /> Control Panel
+              <Info size={18} /> About
             </button>
             <button
               className={`nav-btn ${currentView === 'settings' ? 'nav-btn-active' : ''}`}
               onClick={() => setCurrentView('settings')}
-              style={updateBannerVisible ? { position: 'relative' } : undefined}
             >
               <Settings size={18} /> Settings
-              {updateBannerVisible && (
-                <span className="nav-badge" style={{
-                  position: 'absolute', top: '8px', right: '12px',
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: '#f59e0b',
-                }} title="Update available" />
-              )}
             </button>
             {isSupabaseConfigured() && (
               <button
@@ -985,28 +767,17 @@ function App() {
                 <LogOut size={18} /> Sign Out
               </button>
             )}
-            <div className={`server-status server-status-${serverStatus}`}>
+            <div className={`server-status server-status-online`}>
               <span className="server-status-dot" />
-              {serverStatus === 'online' ? 'App Ready' : serverStatus === 'offline' ? 'App Not Running' : 'Connecting...'}
+              {isSupabaseConfigured() ? 'Cloud Workspace' : 'App Ready'}
             </div>
           </div>
         </nav>
       </div>
 
-      {showInstallBanner && (
-        <div className="pwa-install-banner">
-          <Download size={18} />
-          <span>
-            <strong>Install as Desktop App</strong> — own icon, no browser, opens instantly. Right-click the icon for quick-jump to New Invoice / GST Returns.
-          </span>
-          <button className="pwa-install-btn" onClick={handleInstallPWA}>Install App</button>
-          <button className="pwa-dismiss-btn" onClick={dismissInstallBanner} title="Remind me later (re-shows in 14 days)"><X size={16} /></button>
-        </div>
-      )}
       <div className="main-content">
-        {currentView !== 'new' && <StarBanner />}
         {currentView === 'dashboard' && (
-          <Dashboard onNew={handleNewInvoice} onEdit={handleEditInvoice} onPrint={handlePrintInvoice} onDuplicate={handleDuplicateInvoice} onConvert={handleConvertToInvoice} onOpenProducts={() => setCurrentView('inventory')} onOpenSettings={() => setCurrentView('settings')} onOpenGuide={openDocs} onOpenSupport={() => setCurrentView('support')} activeProfile={profile} />
+          <Dashboard onNew={handleNewInvoice} onEdit={handleEditInvoice} onPrint={handlePrintInvoice} onDuplicate={handleDuplicateInvoice} onConvert={handleConvertToInvoice} onOpenProducts={() => setCurrentView('inventory')} onOpenSettings={() => setCurrentView('settings')} activeProfile={profile} />
         )}
         {currentView === 'new' && (
           <InvoiceGenerator
@@ -1054,16 +825,12 @@ function App() {
         {currentView === 'settings' && (
           <SettingsView onSaved={(p) => setProfile(p)} />
         )}
-        {currentView === 'controlpanel' && (
-          <ControlPanel />
-        )}
-        {currentView === 'support' && (
-          <SupportView />
+        {(currentView === 'support' || currentView === 'about') && (
+          <AboutView />
         )}
         </Suspense>
         </ErrorBoundary>
-        {/* Version + DiceCodes line: Dashboard only, so it never takes space on working screens. */}
-        {currentView === 'dashboard' && <AppFooter onOpenSupport={() => setCurrentView('support')} />}
+        {currentView === 'dashboard' && <AppFooter onOpenAbout={() => setCurrentView('about')} />}
       </div>
 
       {/* Update modal — release notes + Export-backup-first nudge + Update Now */}
@@ -1224,72 +991,6 @@ function App() {
             </table>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.75rem', marginBottom: 0 }}>
               On macOS, use <kbd>⌘</kbd> instead of <kbd>Ctrl</kbd>.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {showUpdateModal && updateInfo && (
-        <div className="modal-overlay" onClick={() => setShowUpdateModal(false)}>
-          <div className="modal-content" style={{ maxWidth: '640px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <div>
-                <h3 className="section-title" style={{ marginTop: 0, marginBottom: '0.25rem' }}>
-                  Update available — v{updateInfo.latest}
-                </h3>
-                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
-                  You're on v{updateInfo.current}
-                  {updateInfo.releasePublishedAt && ` · released ${new Date(updateInfo.releasePublishedAt).toLocaleDateString()}`}
-                </p>
-              </div>
-              <button className="icon-btn" onClick={() => setShowUpdateModal(false)} title="Close"><X size={18} /></button>
-            </div>
-
-            {/* Data-safety reassurance — explicit, prominent. Same .notice-info style
-                as the Data Management privacy card so users learn one visual pattern. */}
-            <div className="notice notice-info" style={{ marginBottom: '0.85rem' }}>
-              <span className="notice-icon">🔒</span>
-              <div>
-                <strong>Your data is safe.</strong> Updates only refresh the app code and dependencies — your <code>data/</code> folder (invoices, clients, products, settings) and <code>Saved Invoices/</code> PDF archive are <strong>never touched</strong>. The updater pulls the latest source from GitHub and rebuilds, then restarts.
-              </div>
-            </div>
-
-            {/* Release notes */}
-            <div className="surface-card" style={{ maxHeight: '320px', overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: '0.82rem', lineHeight: 1.55, marginBottom: '0.85rem' }}>
-              {updateInfo.releaseNotes || (
-                <span style={{ color: 'var(--text-muted)' }}>
-                  No release notes available — see the full changelog at{' '}
-                  <a href={updateInfo.releaseUrl || 'https://github.com/IamRamgarhia/Free-GST-Billing-Software/releases'} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)' }}>GitHub Releases</a>.
-                </span>
-              )}
-            </div>
-
-            {/* Suggested pre-update step: export a backup */}
-            <div className="notice notice-warn" style={{ marginBottom: '1rem' }}>
-              <span className="notice-icon">💡</span>
-              <div>
-                <strong>Recommended:</strong> export a backup before updating, just in case. <button type="button" className="btn-link" onClick={() => { setShowUpdateModal(false); setCurrentView('settings'); }} style={{ background: 'none', border: 0, color: 'var(--primary)', textDecoration: 'underline', cursor: 'pointer', font: 'inherit', padding: 0 }}>Open Settings → Data Management</button> and click <em>Export Backup…</em>.
-              </div>
-            </div>
-
-            <div className="flex gap-2 justify-end" style={{ flexWrap: 'wrap' }}>
-              <button type="button" className="btn btn-secondary" onClick={dismissUpdate}>
-                Skip this version
-              </button>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowUpdateModal(false)}>
-                Remind me later
-              </button>
-              {updateInfo.releaseUrl && (
-                <a href={updateInfo.releaseUrl} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
-                  View on GitHub
-                </a>
-              )}
-              <button type="button" className="btn btn-primary" disabled={updating} onClick={handleUpdateNow}>
-                <Download size={16} /> {updating ? 'Updating…' : 'Update Now'}
-              </button>
-            </div>
-            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.6rem', marginBottom: 0 }}>
-              <em>Update Now</em> backs up your data, then fetches the newest release. It takes about a minute — leave this window open, then reload the page when it finishes.
             </p>
           </div>
         </div>

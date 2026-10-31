@@ -785,12 +785,8 @@ export const markUnpaidPatch = (bill) => {
 // The online documentation. Help buttons link straight to the section for
 // their screen, and the sidebar User Guide opens the start (v1.10.75). The
 // build of docs-site checks that every doc="page#section" used in src exists.
-export const DOCS_URL = 'https://dicecodes.com/free-gst-software-documentation/';
-export const docsLink = (doc = '') => {
-  const [page, section] = String(doc).split('#');
-  if (!page || page === 'index') return DOCS_URL + (section ? `#${section}` : '');
-  return `${DOCS_URL}${page}.html${section ? `#${section}` : ''}`;
-};
+export const DOCS_URL = '';
+export const docsLink = () => '#';
 
 // GSTR-1 B2C Large: an inter-state sale to an unregistered buyer above this
 // invoice value is reported invoice by invoice. The limit fell from ₹2.5 lakh

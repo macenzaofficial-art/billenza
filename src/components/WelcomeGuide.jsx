@@ -115,9 +115,9 @@ export default function WelcomeGuide({ onComplete }) {
               <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
                 <FileText size={32} color="white" />
               </div>
-              <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Welcome to Free GST Billing Software</h1>
+              <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Welcome to Billenza Cloud</h1>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', lineHeight: 1.6 }}>
-                Free, open-source GST billing software that runs 100% on your computer. Your data never leaves your machine.
+                Precision GST billing and compliance SaaS platform connected to your secure cloud database.
               </p>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem', textAlign: 'left' }}>
@@ -125,7 +125,7 @@ export default function WelcomeGuide({ onComplete }) {
                   { title: 'Create Invoices', desc: 'Tax Invoice, Proforma, Credit Note, Bill of Supply, Delivery Challan' },
                   { title: 'Auto GST Calculation', desc: 'CGST/SGST for same state, IGST for different state — automatic' },
                   { title: 'GST Filing Ready', desc: 'GSTR-1, GSTR-3B, HSN reports auto-generated. Download CSVs for portal.' },
-                  { title: '100% Private', desc: 'All data stored locally as files. No cloud, no signup, no tracking.' },
+                  { title: 'Cloud Powered & Secure', desc: 'Real-time PostgreSQL persistence with Row-Level Security & backup.' },
                 ].map((item, i) => (
                   <div key={i} style={{ padding: '1rem', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
                     <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.25rem', color: 'var(--text-primary)' }}>{item.title}</div>

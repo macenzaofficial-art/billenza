@@ -23,18 +23,9 @@ async function apiFetch(url, options = {}) {
 }
 
 // ---- PIN lock (Desktop legacy / Cloud bypass) ----
-export const getLockStatus = async () => {
-  if (isSupabaseConfigured()) return { locked: false, hasPin: false };
-  return apiFetch(`${API}/lock`);
-};
-export const verifyPin = (pin) => {
-  if (isSupabaseConfigured()) return Promise.resolve({ ok: true });
-  return apiFetch(`${API}/lock/verify`, { method: 'POST', body: JSON.stringify({ pin }) });
-};
-export const setLockPin = (pin, currentPin) => {
-  if (isSupabaseConfigured()) return Promise.resolve({ ok: true });
-  return apiFetch(`${API}/lock/set`, { method: 'POST', body: JSON.stringify({ pin, currentPin }) });
-};
+export const getLockStatus = () => Promise.resolve({ locked: false, hasPin: false });
+export const verifyPin = () => Promise.resolve({ ok: true });
+export const setLockPin = () => Promise.resolve({ ok: true });
 
 // ---- Invoice Number Settings ----
 const DEFAULT_INV_SETTINGS = {
@@ -786,21 +777,7 @@ const restoreLocalStorage = (map) => {
   });
 };
 
-export const runUpdateNow = async () => {
-  if (isSupabaseConfigured()) return { ok: true, message: 'Cloud version is always up to date.' };
-  try {
-    const res = await fetch('/api/control-panel/launch-script', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update' }),
-    });
-    const data = await res.json();
-    if (!data.ok) return { ok: false, error: data.error || data.stderr || 'The update script did not finish.' };
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-};
+export const runUpdateNow = () => Promise.resolve({ ok: true, message: 'Cloud version is always up to date.' });
 
 export const exportAllData = async (selection) => {
   if (isSupabaseConfigured()) {
