@@ -15,8 +15,6 @@ export default function AppFooter({ onOpenAbout }) {
         <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Billenza Cloud</span>
         <span aria-hidden="true">·</span>
         <span>© 2026 Billenza Inc.</span>
-        <span aria-hidden="true">·</span>
-        <span style={{ color: '#22c55e', fontWeight: 600 }}>Active Subscription</span>
         {onOpenAbout && (
           <>
             <span aria-hidden="true">·</span>
