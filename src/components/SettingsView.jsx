@@ -1,23 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { getProfile, saveProfile, exportAllData, importData, inspectBackup, getTermsTemplates, saveTermsTemplate, deleteTermsTemplate, getAllProfiles, saveBusinessProfile, deleteBusinessProfile, getRegionMode, setRegionMode, getEnabledModules, setEnabledModules, getStockAlertSettings, saveStockAlertSettings, renameNumberSeries, getInvoiceDisplayOptions, saveInvoiceDisplayOptions } from '../store';
-import { ensureToken, findOrCreateFolder, uploadJSON } from '../services/googleDrive';
 import { getCountryConfig, getStatesForCountry, validateTaxId, getCountriesForRegion, FEATURE_GROUPS, isModuleEnabled, getPaymentAccounts, createEmptyAccount, maskAccountNumber, reorderAccounts, setDefaultAccount, isValidUpiId, findSameBusiness, businessKeyOf, stockDelta } from '../utils';
-// v1.10.36 — lucide's `Image` icon was imported as `Image`, which
-// SHADOWED the browser's `HTMLImageElement` constructor. Reported:
-// "Uncaught TypeError: et is not a constructor at onChange" on logo
-// upload — the minified `et` was our imported React component, and
-// `new Image()` inside handleImageUpload was trying to construct a
-// React icon. Aliased to `ImageIcon` so `new Image()` resolves to
-// the browser primitive again.
-import { Save, Upload, Download, Plus, Trash2, Edit3, Image as ImageIcon, PenTool, Cloud, CloudOff, Building2, Hash, RefreshCw, Save as SaveIcon } from 'lucide-react';
-import { initGoogleDrive, isConnected, disconnect } from '../services/googleDrive';
+import { Save, Upload, Download, Plus, Trash2, Edit3, Image as ImageIcon, PenTool, Building2, Hash, Save as SaveIcon } from 'lucide-react';
 import { toast } from './Toast';
 import { confirmAction } from './ConfirmModal';
 import PrintSettings from './PrintSettings';
 import HelpButton from './HelpButton';
-import AppLockSettings from './AppLockSettings';
 import InvoiceNumberSettings from './InvoiceNumberSettings';
-import { getBackupsList, restoreBackup, triggerBackup, deleteBackup, getTrashedBills, restoreTrashedBill, purgeTrashedBill, runUpdateNow, saveBill, applyStockChanges, getBackupFolder, setBackupFolder } from '../store';
 
 // v1.10.36 — Section order for the jump-nav pill bar. Keeping this at
 // module scope so the scroll-spy effect below can reference it without
@@ -30,11 +19,7 @@ const JUMP_NAV_SECTIONS = [
   ['section-modules',  'Features'],
   ['section-stock',    'Stock'],
   ['section-region',   'Region'],
-  ['section-lock',     'App lock'],
-  ['section-backups',  'Backups'],
-  ['section-cloud',    'Google Drive'],
   ['section-data',     'Import/Export'],
-  ['section-updates',  'Updates'],
 ];
 
 export default function SettingsView({ onSaved }) {
@@ -149,8 +134,6 @@ export default function SettingsView({ onSaved }) {
   const [saving, setSaving] = useState(false);
   const [termsTemplates, setTermsTemplates] = useState([]);
   const [editingTemplate, setEditingTemplate] = useState(null);
-  const [driveConnected, setDriveConnected] = useState(false);
-  const [connecting, setConnecting] = useState(false);
   const [businessProfiles, setBusinessProfiles] = useState([]);
   // v1.10.79 - Invoice Number Format is its own component (InvoiceNumberSettings);
   // the page's "Save all" bar talks to it through this ref and two flags.
@@ -159,19 +142,6 @@ export default function SettingsView({ onSaved }) {
   const [invNumSaving, setInvNumSaving] = useState(false);
   // The business this page belongs to (as saved), for its own numbering (#95).
   const [activeBusiness, setActiveBusiness] = useState(null);
-  const [updateInfo, setUpdateInfo] = useState(null);
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
-  // v1.10.69 - see runUpdateNow() in store.js: this used to be a link to a URL
-  // protocol that no current install registers, so it did nothing at all.
-  const [updatingNow, setUpdatingNow] = useState(false);
-  const handleSettingsUpdateNow = async () => {
-    setUpdatingNow(true);
-    toast('Updating… your data is backed up first. This takes about a minute.', 'info', 8000);
-    const result = await runUpdateNow();
-    setUpdatingNow(false);
-    toast(result.ok ? 'Update finished. Reload the page to use the new version.' : `Update failed — ${result.error}`,
-      result.ok ? 'success' : 'error', 10000);
-  };
   const [regionMode, setRegionModeState] = useState(getRegionMode());
   const [enabledModules, setEnabledModulesState] = useState(getEnabledModules());
   const [stockAlerts, setStockAlerts] = useState({ enabled: true, threshold: 5 });
@@ -216,7 +186,6 @@ export default function SettingsView({ onSaved }) {
     }).catch(() => {}).finally(() => setProfileLoaded(true));
     loadTemplates();
     loadBusinessProfiles();
-    setDriveConnected(isConnected());
     getStockAlertSettings().then((v) => { setStockAlerts(v); setStockSaved(JSON.stringify(v)); }).catch(() => {});
   }, []);
 
@@ -489,33 +458,6 @@ export default function SettingsView({ onSaved }) {
     finally { setSaving(false); }
   };
 
-  // Google Drive
-  const handleConnectDrive = async () => {
-    if (!profile.googleClientId.trim()) {
-      toast('Enter your Google OAuth Client ID first', 'warning');
-      return;
-    }
-    setConnecting(true);
-    try {
-      const result = await initGoogleDrive(profile.googleClientId);
-      if (result.success) {
-        setDriveConnected(true);
-        toast('Connected to Google Drive!', 'success');
-      } else {
-        toast('Failed: ' + (result.error || 'Unknown error'), 'error');
-      }
-    } catch (err) {
-      toast('Connection failed: ' + err.message, 'error');
-    }
-    setConnecting(false);
-  };
-
-  const handleDisconnectDrive = () => {
-    disconnect();
-    setDriveConnected(false);
-    toast('Disconnected from Google Drive', 'info');
-  };
-
   // Export / Import (granular)
   const ALL_BACKUP_PARTS = [
     { id: 'profile',        label: 'Active business profile',  hint: 'Name, address, GSTIN, bank, logo, signature' },
@@ -538,8 +480,6 @@ export default function SettingsView({ onSaved }) {
   const [importSel, setImportSel] = useState(() => Object.fromEntries(ALL_BACKUP_PARTS.map(p => [p.id, true])));
   const [importInspection, setImportInspection] = useState(null);
   const [importJsonText, setImportJsonText] = useState('');
-  const [exportToDrive, setExportToDrive] = useState(false);
-  const [drivePending, setDrivePending] = useState(false);
 
   const toggleExport = (id) => setExportSel(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleImport = (id) => setImportSel(prev => ({ ...prev, [id]: !prev[id] }));
@@ -550,39 +490,19 @@ export default function SettingsView({ onSaved }) {
   const runExport = async () => {
     try {
       const json = await exportAllData(exportSel);
-      const fileName = `freegstbill-backup-${new Date().toISOString().split('T')[0]}.json`;
+      const fileName = `billenza-backup-${new Date().toISOString().split('T')[0]}.json`;
 
-      // Local download (always)
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = fileName; a.click();
       URL.revokeObjectURL(url);
 
-      // Optional Google Drive copy
-      if (exportToDrive) {
-        if (!profile?.googleClientId) {
-          toast('Google Drive not configured. Set Google Client ID in Settings to enable Drive backups.', 'warning');
-        } else {
-          setDrivePending(true);
-          const ok = await ensureToken(profile.googleClientId);
-          if (!ok) { toast('Drive auth failed — backup downloaded locally only', 'warning'); }
-          else {
-            const folderName = (profile.googleDriveFolder || 'GST Billing Invoices') + ' - Backups';
-            const folderId = await findOrCreateFolder(folderName);
-            const result = await uploadJSON(fileName, json, folderId);
-            toast(`Saved to Drive — ${result.name}`, 'success');
-          }
-          setDrivePending(false);
-        }
-      }
-
       toast('Backup downloaded', 'success');
       setShowExportModal(false);
     } catch (err) {
       console.error(err);
       toast('Export failed: ' + (err.message || 'unknown error'), 'error');
-      setDrivePending(false);
     }
   };
 
@@ -592,7 +512,7 @@ export default function SettingsView({ onSaved }) {
     try {
       const text = await file.text();
       const inspection = inspectBackup(text);
-      if (!inspection.valid) { toast("This file doesn't look like a Free GST Billing backup.", 'error'); return; }
+      if (!inspection.valid) { toast("This file doesn't look like a valid Billenza backup.", 'error'); return; }
       setImportInspection(inspection);
       setImportJsonText(text);
       // Auto-tick only the parts that actually have data in the file
@@ -815,8 +735,6 @@ export default function SettingsView({ onSaved }) {
               <li><strong>Payment Accounts</strong> — add multiple bank / UPI accounts; ⭐ marks the default. Every inline change (add / edit / ⭐ / reorder / delete) auto-saves.</li>
               <li><strong>Invoice Number Settings</strong> — brand prefix, financial-year suffix, padding. Live preview at the bottom.</li>
               <li><strong>Print Settings</strong> — templates, colors, watermark, thermal font size, per-type prefix overrides.</li>
-              <li><strong>Backup Management</strong> — daily auto-backups kept 30 days. Restore any date, or Delete to reclaim disk. Trash bin keeps deleted invoices for 30 days.</li>
-              <li><strong>Google Drive</strong> — easiest: install Google Drive for Desktop and sync the Saved Invoices folder. Advanced: connect your own Google Client ID to upload each downloaded invoice PDF.</li>
               <li><strong>Data Management</strong> — export all or part of your data to one backup file, and import it here or on another computer. Clients and products import from CSV on their own screens.</li>
             </ul>
           </HelpButton>
@@ -1016,9 +934,6 @@ export default function SettingsView({ onSaved }) {
       {/* ---- Thermal Printer Settings ---- */}
       <div id="section-print" style={{ order: 4 }}><PrintSettings /></div>
 
-      {/* v1.9.5 — Backup Management + Trash Bin */}
-      <div id="section-backups" style={{ order: 8 }}><BackupAndTrashPanel /></div>
-
       {/* ---- Modules / Features ---- */}
       <div id="section-modules" className="glass-panel p-6 mb-6" style={{ order: 5 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -1084,11 +999,6 @@ export default function SettingsView({ onSaved }) {
             </button>
           ))}
         </div>
-      </div>
-
-      {/* v1.10.77 (#84) - optional PIN lock. Same order as Region, so it sits right after it. */}
-      <div id="section-lock" className="glass-panel p-6 mb-6" style={{ order: 7 }}>
-        <AppLockSettings />
       </div>
 
       {/* ---- Business Profile ---- */}
@@ -1553,81 +1463,6 @@ export default function SettingsView({ onSaved }) {
         )}
       </div>
 
-      {/* ---- Cloud Backup ---- */}
-      <div id="section-cloud" className="glass-panel p-6 mb-6" style={{ order: 9 }}>
-        <h3 className="section-title">Cloud Backup (Google Drive)</h3>
-        <p className="page-subtitle mb-4">
-          Auto-sync your invoices to Google Drive — no coding or API setup needed.
-        </p>
-
-        {/* Easy method */}
-        <div style={{ background: 'var(--bg-secondary, #f8fafc)', borderRadius: '10px', padding: '1.25rem', marginBottom: '1rem', border: '1px solid var(--border)' }}>
-          <h4 style={{ fontSize: '0.95rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Cloud size={18} color="var(--primary)" /> Easiest Way — Google Drive for Desktop (Recommended)
-          </h4>
-          <ol style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.8, paddingLeft: '1.25rem', margin: 0 }}>
-            <li>
-              <a href="https://www.google.com/drive/download/" target="_blank" rel="noopener noreferrer"
-                style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                Download Google Drive for Desktop
-              </a> (free from Google) and install it
-            </li>
-            <li>Sign in with your Google account — a <strong>Google Drive (G:)</strong> folder appears on your PC</li>
-            <li>Move your app's <strong>Saved Invoices</strong> folder into Google Drive, or set Windows to sync it</li>
-            <li>Done! All PDFs automatically sync to your Google Drive cloud</li>
-          </ol>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.75rem', marginBottom: 0 }}>
-            Your invoices will be accessible from any device, phone, or computer via drive.google.com. No API key needed.
-          </p>
-        </div>
-
-        {/* Advanced API method - collapsible */}
-        <details style={{ fontSize: '0.85rem' }}>
-          <summary style={{ cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.82rem', padding: '0.5rem 0' }}>
-            Advanced: Direct API Upload (for developers)
-          </summary>
-          <div style={{ paddingTop: '0.75rem' }}>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="form-group full-width">
-                <label className="form-label">Google OAuth Client ID</label>
-                <input type="text" name="googleClientId" className="form-input" value={profile.googleClientId} onChange={handleChange}
-                  placeholder="xxxx.apps.googleusercontent.com" />
-                <p className="field-hint">
-                  <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer"
-                    style={{ color: 'var(--primary)' }}>Open Google Cloud Console</a> &rarr; Create Project &rarr; Enable Drive API &rarr; Create OAuth Client ID (Web app) &rarr; Add <code>{window.location.origin}</code> as origin.
-                </p>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Drive Folder Name</label>
-                <input type="text" name="googleDriveFolder" className="form-input" value={profile.googleDriveFolder} onChange={handleChange}
-                  placeholder="GST Billing Invoices" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Status</label>
-                <div className="flex gap-2 mt-2">
-                  {driveConnected ? (
-                    <>
-                      <span className="status-badge" style={{ background: 'var(--info-bg)', color: 'var(--info-text)' }}>
-                        <Cloud size={14} /> Connected
-                      </span>
-                      <button type="button" className="btn btn-secondary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
-                        onClick={handleDisconnectDrive}>
-                        <CloudOff size={14} /> Disconnect
-                      </button>
-                    </>
-                  ) : (
-                    <button type="button" className="btn btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
-                      onClick={handleConnectDrive} disabled={connecting}>
-                      <Cloud size={16} /> {connecting ? 'Connecting...' : 'Connect Google Drive'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </details>
-      </div>
-
       {/* ---- Terms Templates ---- */}
       <div id="section-terms" className="glass-panel p-6 mb-6" style={{ order: 3 }}>
         <div className="flex justify-between items-center mb-4">
@@ -1710,61 +1545,15 @@ export default function SettingsView({ onSaved }) {
            kept as a comment so a code search for "Multi-Business
            Profiles" still lands somewhere sensible. */}
 
-      {/* ---- App Updates ---- */}
-      <div id="section-updates" className="glass-panel p-6 mb-6" style={{ order: 11 }}>
-        <h3 className="section-title">App Updates</h3>
-        <p className="page-subtitle mb-4">Check if a newer version is available.</p>
-        <div className="flex gap-4 items-center">
-          <button type="button" className="btn btn-secondary" disabled={checkingUpdate} onClick={async () => {
-            setCheckingUpdate(true);
-            try {
-              const res = await fetch('/api/check-update');
-              const data = await res.json();
-              setUpdateInfo(data);
-              if (data.updateAvailable) {
-                toast(`Update available: v${data.latest}`, 'info');
-              } else if (data.error) {
-                toast('Could not check for updates. Check internet connection.', 'warning');
-              } else {
-                toast('You are on the latest version!', 'success');
-              }
-            } catch {
-              toast('Could not check for updates.', 'error');
-            }
-            setCheckingUpdate(false);
-          }}>
-            <RefreshCw size={18} className={checkingUpdate ? 'spin' : ''} /> {checkingUpdate ? 'Checking...' : 'Check for Updates'}
-          </button>
-          {updateInfo && (
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              Current: v{updateInfo.current}{updateInfo.latest ? ` | Latest: v${updateInfo.latest}` : ''}
-            </span>
-          )}
-        </div>
-        {updateInfo?.updateAvailable && (
-          <div className="update-available-box">
-            <p><strong>New version v{updateInfo.latest} is available!</strong></p>
-            <p>Your data is backed up first and is not affected. Click below to update:</p>
-            <button type="button" className="btn btn-primary" disabled={updatingNow} onClick={handleSettingsUpdateNow} style={{ marginTop: '0.5rem', display: 'inline-flex' }}>
-              <Download size={18} /> {updatingNow ? 'Updating…' : 'Update Now'}
-            </button>
-          </div>
-        )}
-      </div>
-
       <div id="section-data" className="glass-panel p-6 mb-6" style={{ order: 10 }}>
         <h3 className="section-title">Data Management</h3>
 
-        {/* Privacy notice — uses the global .notice .notice-info utility so dark/light look identical to every other info card. */}
         <div className="notice notice-info" style={{ marginBottom: '1rem' }}>
           <span className="notice-icon">🔒</span>
           <div>
-            <strong>Your data is on this computer only.</strong> Nothing is uploaded to
-            us, our servers, or any third party — not invoices, not clients, not
-            settings. The only time anything leaves your machine is if you explicitly
-            click <em>Save to Drive</em> below (uploads to <strong>your own</strong>
-            Google Drive account).
-            Files live under <code>data/</code> and <code>Saved Invoices/</code> next to the app.
+            <strong>Cloud Workspace Data.</strong> Your business data is securely stored and synchronised with your
+            cloud workspace. You can export complete or partial backups in JSON format at any time for data portability
+            or offline archiving.
           </div>
         </div>
 
@@ -1781,7 +1570,7 @@ export default function SettingsView({ onSaved }) {
 
       {/* ----------------------- Export modal ----------------------- */}
       {showExportModal && (
-        <div className="modal-overlay" onClick={() => !drivePending && setShowExportModal(false)}>
+        <div className="modal-overlay" onClick={() => setShowExportModal(false)}>
           <div className="modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
             <h3 className="section-title" style={{ marginTop: 0 }}>Export Backup</h3>
             <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '0.75rem' }}>
@@ -1803,21 +1592,10 @@ export default function SettingsView({ onSaved }) {
               ))}
             </div>
 
-            {/* Optional: Google Drive copy. Uses global cbx-row utility — identical dark/light. */}
-            <label className="cbx-row" style={{ marginTop: '0.5rem' }}>
-              <input type="checkbox" checked={exportToDrive} onChange={e => setExportToDrive(e.target.checked)} />
-              <span>
-                <span className="cbx-label">Also save a copy to my Google Drive</span>
-                <span className="cbx-hint">
-                  Uploads to <em>{(profile.googleDriveFolder || 'GST Billing Invoices')} - Backups</em> in your Drive. Requires Google Client ID configured above. The file always downloads to your computer too.
-                </span>
-              </span>
-            </label>
-
             <div className="flex gap-2 justify-end mt-4">
-              <button type="button" className="btn btn-secondary" onClick={() => setShowExportModal(false)} disabled={drivePending}>Cancel</button>
-              <button type="button" className="btn btn-primary" onClick={runExport} disabled={drivePending || !Object.values(exportSel).some(Boolean)}>
-                {drivePending ? 'Uploading…' : <><Download size={16} /> Download Backup</>}
+              <button type="button" className="btn btn-secondary" onClick={() => setShowExportModal(false)}>Cancel</button>
+              <button type="button" className="btn btn-primary" onClick={runExport} disabled={!Object.values(exportSel).some(Boolean)}>
+                <Download size={16} /> Download Backup
               </button>
             </div>
           </div>
@@ -1908,236 +1686,5 @@ function EditIcon({ size }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" />
     </svg>
-  );
-}
-
-// ============================================================
-// v1.9.5 — Backup Management + Trash Bin
-// ============================================================
-function BackupAndTrashPanel() {
-  const [backups, setBackups] = useState([]);
-  const [trash, setTrash] = useState([]);
-  const [loading, setLoading] = useState(false);
-  // v1.10.80 (#99) - extra backup folder (another drive).
-  const [backupFolder, setBackupFolderState] = useState({ path: '', error: '' });
-  const [folderInput, setFolderInput] = useState('');
-  const [folderBusy, setFolderBusy] = useState(false);
-
-  const loadAll = async () => {
-    setLoading(true);
-    try {
-      const [b, t, f] = await Promise.all([
-        getBackupsList().catch(() => []),
-        getTrashedBills().catch(() => []),
-        getBackupFolder().catch(() => null),
-      ]);
-      setBackups(b);
-      setTrash(t);
-      if (f) { setBackupFolderState(f); setFolderInput(f.path || ''); }
-    } catch { /* ignore */ }
-    setLoading(false);
-  };
-
-  const saveBackupFolder = async (value) => {
-    setFolderBusy(true);
-    try {
-      const res = await setBackupFolder(value);
-      if (!value) toast('Backups are kept in the app folder only.', 'info');
-      else if (res?.error) toast(`Folder saved, but copying today's backup failed: ${res.error}`, 'warning', 9000);
-      else toast(`Daily backups are now also copied to ${res.copiesIn}`, 'success', 8000);
-      loadAll();
-    } catch (err) {
-      toast(err.body?.error || err.message || 'Could not use that folder', 'error', 9000);
-    } finally {
-      setFolderBusy(false);
-    }
-  };
-
-  useEffect(() => { loadAll(); }, []);
-
-  const handleRestoreBackup = async (date) => {
-    if (!await confirmAction({
-      title: `Restore all data from backup ${date}?`,
-      message: 'This OVERWRITES your current data. A copy of your data as it is now is kept first, in data/backups/pre-restore-…, so you can go back to it if the restore looks wrong.',
-      confirmLabel: 'Restore backup',
-      tone: 'warning',
-    })) return;
-    try {
-      await triggerBackup().catch(() => {}); // today's daily backup, if not made yet
-      const res = await restoreBackup(date);
-      toast(`Backup restored — please reload the page to see the data.${res?.snapshot ? ` Your data from before is in data/backups/${res.snapshot}.` : ''}`, 'success', 10000);
-    } catch (err) {
-      toast('Restore failed: ' + err.message, 'error');
-    }
-  };
-
-  const handleRestoreTrash = async (id) => {
-    try {
-      await restoreTrashedBill(id);
-      // Back in the books, so the stock its delete put back is taken out again.
-      // Only what that delete recorded (stockReturnedOnDelete): invoices
-      // deleted before it was recorded never had their stock put back.
-      const { _trashedAt, ...bill } = trash.find((b) => b.id === id) || {};
-      const back = bill.data?.stockReturnedOnDelete;
-      if (back && Object.keys(back).length) {
-        const { stockReturnedOnDelete: _gone, ...data } = bill.data;
-        await saveBill({ ...bill, data: { ...data, stockApplied: back } }, { overwrite: true });
-        await applyStockChanges(stockDelta({}, back)).catch(() => {});
-      }
-      toast('Invoice restored', 'success');
-      loadAll();
-    } catch (err) {
-      toast('Restore failed: ' + err.message, 'error');
-    }
-  };
-
-  const handlePurgeTrash = async (id) => {
-    if (!await confirmAction({
-      title: 'Permanently delete this invoice?',
-      message: 'This bypasses the 30-day Trash grace period. The invoice and its PDF are gone for good.',
-      confirmLabel: 'Delete permanently',
-      tone: 'danger',
-    })) return;
-    try {
-      await purgeTrashedBill(id);
-      toast('Invoice permanently deleted', 'info');
-      loadAll();
-    } catch (err) {
-      toast('Purge failed: ' + err.message, 'error');
-    }
-  };
-
-  // v1.10.22 — reported: "add here delete option i know u added 30 days
-  // auto delete but manual delete also u add". Individual backup delete.
-  const handleDeleteBackup = async (date) => {
-    if (!await confirmAction({
-      title: `Delete backup ${date}?`,
-      message: 'Auto-backups still run daily, so future data will be safe. This just removes the archived snapshot.',
-      confirmLabel: 'Delete backup',
-      tone: 'danger',
-    })) return;
-    try {
-      await deleteBackup(date);
-      toast(`Backup ${date} deleted`, 'info');
-      loadAll();
-    } catch (err) {
-      toast('Delete failed: ' + err.message, 'error');
-    }
-  };
-
-  return (
-    <div className="glass-panel p-6 mb-6">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.75rem' }}>
-        <div>
-          <h3 className="section-title" style={{ marginTop: 0, marginBottom: '0.25rem' }}>
-            💾 Backup Management + 🗑 Trash Bin
-          </h3>
-          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
-            Automatic daily snapshots kept for 30 days · Deleted invoices stay in the trash for 30 days.
-          </p>
-        </div>
-        <button className="btn btn-secondary" style={{ fontSize: '0.82rem' }}
-          onClick={async () => {
-            // v1.10.74 - show an error instead of failing silently
-            try {
-              await triggerBackup();
-              toast('Manual backup triggered', 'success');
-              loadAll();
-            } catch (err) {
-              toast('Backup failed: ' + (err.message || 'unknown error'), 'error');
-            }
-          }}>
-          <SaveIcon size={14} /> Backup now
-        </button>
-      </div>
-
-      {/* v1.10.80 (#99) - requested: backups only on C: are lost when Windows fails. */}
-      <div style={{ padding: '0.85rem', background: 'var(--bg-secondary)', borderRadius: 8, marginTop: '0.75rem' }}>
-        <label className="form-label" htmlFor="backup-folder">Also keep a copy of every daily backup in this folder</label>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <input id="backup-folder" type="text" className="form-input" style={{ flex: 1, minWidth: 220 }}
-            placeholder={'e.g. D:\\FreeGSTBill or E:\\ (a second drive or USB disk)'}
-            value={folderInput} onChange={(e) => setFolderInput(e.target.value)} />
-          <button type="button" className="btn btn-primary" disabled={folderBusy || folderInput.trim() === (backupFolder.path || '')}
-            onClick={() => saveBackupFolder(folderInput.trim())}>Save folder</button>
-          {backupFolder.path && (
-            <button type="button" className="btn btn-secondary" disabled={folderBusy} onClick={() => saveBackupFolder('')}>Stop copying</button>
-          )}
-        </div>
-        <p className="field-hint" style={{ marginBottom: 0 }}>
-          {backupFolder.path
-            ? <>Copies go to <strong>{backupFolder.copiesIn}</strong> (30 days kept). If this PC fails, install the app again, set the same folder here, and its backups appear in the list below to restore.</>
-            : 'Backups are kept in the app folder on this drive. Choose a folder on another drive (D:, a USB disk) so they survive if this drive fails.'}
-        </p>
-        {backupFolder.error && <p role="alert" style={{ color: 'var(--danger)', fontSize: '0.8rem', margin: '0.35rem 0 0' }}>The last copy failed: {backupFolder.error}. Is the drive connected?</p>}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
-        {/* Backups list */}
-        <div style={{ padding: '0.85rem', background: 'var(--bg-secondary)', borderRadius: 8 }}>
-          <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.9rem' }}>📅 Daily backups ({backups.length})</h4>
-          {loading && backups.length === 0 && <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Loading…</p>}
-          {!loading && backups.length === 0 && <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>No backups yet — the first will be created at midnight or click "Backup now" above.</p>}
-          <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-            {backups.map(b => (
-              <div key={b.date} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '0.4rem 0.6rem', marginBottom: '0.25rem',
-                background: 'var(--card)', borderRadius: 4, fontSize: '0.82rem',
-              }}>
-                <div>
-                  <strong>{b.date}</strong>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                    {b.createdAt ? new Date(b.createdAt).toLocaleTimeString('en-IN') : ''}
-                    {b.onlyInBackupFolder ? ' · in your backup folder only' : (b.inBackupFolder ? ' · also in your backup folder' : '')}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '0.25rem' }}>
-                  <button className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
-                    onClick={() => handleRestoreBackup(b.date)}>
-                    Restore
-                  </button>
-                  {!b.onlyInBackupFolder && (
-                    <button className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem', color: '#dc2626', borderColor: '#fca5a5' }}
-                      onClick={() => handleDeleteBackup(b.date)} title="Delete this backup (the copy in your backup folder stays)">
-                      Delete
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Trash bin */}
-        <div style={{ padding: '0.85rem', background: 'var(--bg-secondary)', borderRadius: 8 }}>
-          <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.9rem' }}>🗑 Trash bin ({trash.length})</h4>
-          {loading && trash.length === 0 && <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Loading…</p>}
-          {!loading && trash.length === 0 && <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>No deleted invoices. Anything you delete lands here for 30 days.</p>}
-          <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-            {trash.map(bill => (
-              <div key={bill.id} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '0.4rem 0.6rem', marginBottom: '0.25rem',
-                background: 'var(--card)', borderRadius: 4, fontSize: '0.82rem',
-              }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <strong>{bill.invoiceNumber}</strong>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {bill.clientName} · deleted {bill._trashedAt ? new Date(bill._trashedAt).toLocaleDateString('en-IN') : ''}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '0.25rem' }}>
-                  <button className="btn btn-secondary" style={{ fontSize: '0.7rem', padding: '0.2rem 0.4rem' }}
-                    onClick={() => handleRestoreTrash(bill.id)}>Restore</button>
-                  <button className="btn btn-secondary" style={{ fontSize: '0.7rem', padding: '0.2rem 0.4rem', color: '#dc2626', borderColor: '#fca5a5' }}
-                    onClick={() => handlePurgeTrash(bill.id)}>Delete forever</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
