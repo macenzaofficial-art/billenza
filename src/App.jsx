@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
-import { Home, FileText, Settings, Plus, Users, Package, BarChart3, Wallet, RefreshCw, Receipt, BookOpen, Moon, Sun, Download, X, ShoppingCart, ChevronDown, Building2, Pencil, HelpCircle, Search, Command, Bell, Calculator, HardDrive, Menu, Heart } from 'lucide-react';
+import { Home, FileText, Settings, Plus, Users, Package, BarChart3, Wallet, RefreshCw, Receipt, BookOpen, Moon, Sun, Download, X, ShoppingCart, ChevronDown, Building2, Pencil, HelpCircle, Search, Command, Bell, Calculator, HardDrive, Menu, Heart, LogOut } from 'lucide-react';
+import { signOut } from './services/authService';
+import { isSupabaseConfigured } from './services/supabaseClient';
 import { getAllProfiles, saveProfile, getEnabledModules, getAllBills, getAllProducts, getStockAlertSettings, getAllClients, runUpdateNow, getLockStatus } from './store';
 import { isModuleEnabled, getUpcomingFilings, countsAsSales, localToday, toLocalIsoDate, DOCS_URL } from './utils';
 // v1.10.4 — Route-level lazy loading. Prior App.jsx synchronously
@@ -36,6 +38,7 @@ const ControlPanel = lazy(() => import('./components/ControlPanel'));
 const SupportView = lazy(() => import('./components/SupportView'));
 import StarBanner from './components/StarBanner';
 import AppFooter from './components/AppFooter';
+import ErrorBoundary from './components/ErrorBoundary';
 import LockButton from './components/LockButton';
 import { lockNow } from './utils/appLock';
 import { getPrintSettings } from './utils/printSettings';
@@ -821,8 +824,8 @@ function App() {
             <FileText size={22} />
           </div>
           <div>
-            <h2 className="sidebar-title">GST Billing</h2>
-            <p className="sidebar-subtitle">by DiceCodes</p>
+            <h2 className="sidebar-title">Billenza</h2>
+            <p className="sidebar-subtitle">GST Cloud Suite</p>
           </div>
           {/* Auto-hide as a ☰ button (was a text checkbox): pressed = the menu
               shrinks to icons and opens when pointed at. */}
@@ -972,6 +975,16 @@ function App() {
                 }} title="Update available" />
               )}
             </button>
+            {isSupabaseConfigured() && (
+              <button
+                className="nav-btn"
+                onClick={() => signOut()}
+                title="Sign out of Billenza account"
+                style={{ color: '#ef4444' }}
+              >
+                <LogOut size={18} /> Sign Out
+              </button>
+            )}
             <div className={`server-status server-status-${serverStatus}`}>
               <span className="server-status-dot" />
               {serverStatus === 'online' ? 'App Ready' : serverStatus === 'offline' ? 'App Not Running' : 'Connecting...'}
@@ -1004,6 +1017,7 @@ function App() {
         )}
         {/* v1.10.4 — All lazy views under one Suspense boundary. Only the
              matched view's chunk actually loads; others stay unfetched. */}
+        <ErrorBoundary onReset={() => setCurrentView('dashboard')}>
         <Suspense fallback={<ViewLoading />}>
         {currentView === 'clients' && (
           <ClientsView onNew={handleNewInvoice} onEdit={handleEditInvoice} onDuplicate={handleDuplicateInvoice} />
@@ -1047,6 +1061,7 @@ function App() {
           <SupportView />
         )}
         </Suspense>
+        </ErrorBoundary>
         {/* Version + DiceCodes line: Dashboard only, so it never takes space on working screens. */}
         {currentView === 'dashboard' && <AppFooter onOpenSupport={() => setCurrentView('support')} />}
       </div>

@@ -207,10 +207,12 @@ export default function SettingsView({ onSaved }) {
 
   useEffect(() => {
     getProfile().then((p) => {
-      setProfile(p);
-      // Baseline for the unsaved-changes check — what is currently on disk.
-      savedProfileRef.current = JSON.stringify(p);
-      setActiveBusiness(p);
+      if (p) {
+        setProfile(prev => ({ ...prev, ...p }));
+        // Baseline for the unsaved-changes check — what is currently on disk.
+        savedProfileRef.current = JSON.stringify(p);
+        setActiveBusiness(p);
+      }
     }).catch(() => {}).finally(() => setProfileLoaded(true));
     loadTemplates();
     loadBusinessProfiles();
