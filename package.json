@@ -8,6 +8,10 @@
     "type": "git",
     "url": "https://github.com/IamRamgarhia/Free-GST-Billing-Software.git"
   },
+  "contributors": [
+    "IamRamgarhia (https://github.com/IamRamgarhia)",
+    "DiceCodes (Contact@dicecodes.com)"
+  ],
   "keywords": [
     "gst",
     "gst-invoice",

@@ -1,6 +1,6 @@
 import { Zap } from 'lucide-react';
 
-export default function AppFooter() {
+export default function AppFooter({ onOpenAbout }) {
   return (
     <footer style={{
       marginTop: 'auto', paddingTop: '1.5rem',
@@ -17,6 +17,14 @@ export default function AppFooter() {
         <span>© 2026 Billenza Inc.</span>
         <span aria-hidden="true">·</span>
         <span style={{ color: '#22c55e', fontWeight: 600 }}>Active Subscription</span>
+        {onOpenAbout && (
+          <>
+            <span aria-hidden="true">·</span>
+            <button type="button" onClick={onOpenAbout} style={{ background: 'none', border: 0, padding: 0, font: 'inherit', color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline' }}>
+              About &amp; Credits
+            </button>
+          </>
+        )}
       </span>
     </footer>
   );
