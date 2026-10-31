@@ -98,6 +98,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
+    "asciify-engine": "^4.32.8",
     "cors": "^2.8.6",
     "dompurify": "^3.4.17",
     "express": "^5.2.1",
