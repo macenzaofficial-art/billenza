@@ -19,7 +19,7 @@ export default function WelcomeGuide({ onComplete, initialProfile }) {
   const [profile, setProfile] = useState(() => ({
     businessName: initialProfile?.businessName && initialProfile.businessName !== 'My Business'
       ? initialProfile.businessName
-      : (initialProfile?.businessName || ''),
+      : '',
     address: initialProfile?.address || '',
     city: initialProfile?.city || '',
     pin: initialProfile?.pincode || initialProfile?.pin || '',
@@ -153,9 +153,13 @@ export default function WelcomeGuide({ onComplete, initialProfile }) {
               <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
                 <FileText size={32} color="white" />
               </div>
-              <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Welcome to Billenza Cloud</h1>
+              <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
+                {isSupabaseConfigured() ? 'Welcome to Billenza Cloud' : 'Welcome to Free GST Billing Software'}
+              </h1>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', lineHeight: 1.6 }}>
-                Precision GST billing and compliance SaaS platform connected to your secure cloud database.
+                {isSupabaseConfigured()
+                  ? 'Precision GST billing and compliance SaaS platform connected to your secure cloud database.'
+                  : 'Free, open-source GST billing software that runs 100% on your computer. Your data never leaves your machine.'}
               </p>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem', textAlign: 'left' }}>
@@ -163,7 +167,9 @@ export default function WelcomeGuide({ onComplete, initialProfile }) {
                   { title: 'Create Invoices', desc: 'Tax Invoice, Proforma, Credit Note, Bill of Supply, Delivery Challan' },
                   { title: 'Auto GST Calculation', desc: 'CGST/SGST for same state, IGST for different state — automatic' },
                   { title: 'GST Filing Ready', desc: 'GSTR-1, GSTR-3B, HSN reports auto-generated. Download CSVs for portal.' },
-                  { title: 'Cloud Powered & Secure', desc: 'Real-time PostgreSQL persistence with Row-Level Security & backup.' },
+                  isSupabaseConfigured()
+                    ? { title: 'Cloud Powered & Secure', desc: 'Real-time PostgreSQL persistence with Row-Level Security & backup.' }
+                    : { title: '100% Private', desc: 'All data stored locally as files. No cloud, no signup, no tracking.' },
                 ].map((item, i) => (
                   <div key={i} style={{ padding: '1rem', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
                     <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.25rem', color: 'var(--text-primary)' }}>{item.title}</div>

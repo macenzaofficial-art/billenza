@@ -262,29 +262,12 @@ export const getNextInvoiceNumber = async (prefix = 'INV', { peek = false, expli
         }
       } else {
         const { data, error } = await supabase.rpc('increment_counter', { key, start });
-        if (!error && data != null) {
-          next = Number(data);
-        } else {
-          const { data: row } = await supabase
-            .from('invoice_counters')
-            .select('value')
-            .eq('key', key)
-            .maybeSingle();
-          const current = row?.value != null ? Number(row.value) : null;
-          const target = nextCounterValue(current, start);
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            await supabase.from('invoice_counters').upsert({
-              user_id: user.id,
-              key,
-              value: target,
-              updated_at: new Date().toISOString(),
-            });
-          }
-          next = target;
-        }
+        if (error) throw error;
+        if (data == null) throw new Error('Counter increment returned no data');
+        next = Number(data);
       }
-    } catch {
+    } catch (err) {
+      if (!peek) throw err;
       next = start;
     }
   } else {
@@ -810,7 +793,13 @@ export const getAllProfiles = async () => {
   if (isSupabaseConfigured()) {
     const { data, error } = await supabase.from('profiles').select('*').order('created_at');
     if (error) throw error;
-    return (data || []).map((r) => ({ businessName: r.business_name || '', ...r.data, id: r.id, userId: r.user_id }));
+    return (data || []).map((r) => ({
+      businessName: r.business_name || '',
+      ...r.data,
+      id: r.id,
+      userId: r.user_id,
+      isDefault: Boolean(r.is_default),
+    }));
   }
   return apiFetch(`${API}/profiles`);
 };
@@ -917,17 +906,25 @@ export const exportAllData = async (selection) => {
   };
 
   if (isSupabaseConfigured()) {
-    const [profile, profiles, bills, clients, products, expenses, purchases, recurring, receipts, termsTemplates] = await Promise.all([
-      sel.profile ? getProfile().catch(() => null) : Promise.resolve(null),
-      sel.profiles ? getAllProfiles().catch(() => []) : Promise.resolve([]),
-      sel.bills ? getAllBills().catch(() => []) : Promise.resolve([]),
-      sel.clients ? getAllClients().catch(() => []) : Promise.resolve([]),
-      sel.products ? getAllProducts().catch(() => []) : Promise.resolve([]),
-      sel.expenses ? getAllExpenses().catch(() => []) : Promise.resolve([]),
-      sel.purchases ? getAllPurchases().catch(() => []) : Promise.resolve([]),
-      sel.recurring ? getAllRecurring().catch(() => []) : Promise.resolve([]),
-      sel.receipts ? getAllReceipts().catch(() => []) : Promise.resolve([]),
-      sel.termsTemplates ? getTermsTemplates().catch(() => []) : Promise.resolve([]),
+    const [profile, profiles, bills, clients, products, expenses, purchases, recurring, receipts, termsTemplates, meta] = await Promise.all([
+      sel.profile ? getProfile() : Promise.resolve(null),
+      sel.profiles ? getAllProfiles() : Promise.resolve([]),
+      sel.bills ? getAllBills() : Promise.resolve([]),
+      sel.clients ? getAllClients() : Promise.resolve([]),
+      sel.products ? getAllProducts() : Promise.resolve([]),
+      sel.expenses ? getAllExpenses() : Promise.resolve([]),
+      sel.purchases ? getAllPurchases() : Promise.resolve([]),
+      sel.recurring ? getAllRecurring() : Promise.resolve([]),
+      sel.receipts ? getAllReceipts() : Promise.resolve([]),
+      sel.termsTemplates ? getTermsTemplates() : Promise.resolve([]),
+      sel.meta ? (async () => {
+        const { data, error } = await supabase
+          .from('user_preferences')
+          .select('invoice_number_settings, invoice_number_series, stock_alert_settings, region_mode, enabled_modules, data')
+          .maybeSingle();
+        if (error) throw error;
+        return data;
+      })() : Promise.resolve(null),
     ]);
 
     const data = {
@@ -945,6 +942,7 @@ export const exportAllData = async (selection) => {
     if (sel.recurring && recurring?.length) data.recurring = recurring;
     if (sel.receipts && receipts?.length)   data.receipts = receipts;
     if (sel.purchases && purchases?.length) data.purchases = purchases;
+    if (sel.meta && meta)                  data.meta = meta;
     if (sel.localStorage)                  data.localStorage = collectLocalStorage();
 
     return JSON.stringify(data, null, 2);
@@ -1072,6 +1070,41 @@ export const importData = async (jsonString, selection) => {
       for (const tpl of data.termsTemplates) {
         await saveTermsTemplate(tpl);
         templateCount++;
+      }
+    }
+    if (sel.meta && data.meta && typeof data.meta === 'object') {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const metaUpdate = {
+          user_id: user.id,
+          updated_at: new Date().toISOString(),
+        };
+        const invSettings = data.meta.invoice_number_settings ?? data.meta.invoiceNumberSettings;
+        if (invSettings !== undefined) metaUpdate.invoice_number_settings = invSettings;
+
+        const invSeries = data.meta.invoice_number_series ?? data.meta.invoiceNumberSeries;
+        if (invSeries !== undefined) metaUpdate.invoice_number_series = invSeries;
+
+        const stockSettings = data.meta.stock_alert_settings ?? data.meta.stockAlertSettings;
+        if (stockSettings !== undefined) metaUpdate.stock_alert_settings = stockSettings;
+
+        const regionMode = data.meta.region_mode ?? data.meta.regionMode;
+        if (regionMode !== undefined) {
+          metaUpdate.region_mode = regionMode;
+          try { localStorage.setItem(REGION_KEY, regionMode); } catch {}
+        }
+
+        const enabledModules = data.meta.enabled_modules ?? data.meta.enabledModules;
+        if (enabledModules !== undefined) {
+          metaUpdate.enabled_modules = enabledModules;
+          try { localStorage.setItem(MODULES_KEY, typeof enabledModules === 'string' ? enabledModules : JSON.stringify(enabledModules)); } catch {}
+        }
+
+        const prefData = data.meta.data ?? (data.meta.invoiceDisplayOptions !== undefined ? { invoiceDisplayOptions: data.meta.invoiceDisplayOptions } : undefined);
+        if (prefData !== undefined) metaUpdate.data = prefData;
+
+        const { error } = await supabase.from('user_preferences').upsert(metaUpdate);
+        if (error) throw error;
       }
     }
     if (sel.localStorage && data.localStorage) {

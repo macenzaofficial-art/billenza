@@ -1557,9 +1557,18 @@ export default function SettingsView({ onSaved }) {
         <div className="notice notice-info" style={{ marginBottom: '1rem' }}>
           <span className="notice-icon">🔒</span>
           <div>
-            <strong>Cloud Workspace Data.</strong> Your business data is securely stored and synchronised with your
-            cloud workspace. You can export complete or partial backups in JSON format at any time for data portability
-            or offline archiving.
+            {isSupabaseConfigured() ? (
+              <>
+                <strong>Cloud Workspace Data.</strong> Your business data is securely stored and synchronised with your
+                cloud workspace. You can export complete or partial backups in JSON format at any time for data portability
+                or offline archiving.
+              </>
+            ) : (
+              <>
+                <strong>100% Private &amp; Offline.</strong> All your data is stored locally in the <code style={{ background: 'var(--border-color)', padding: '0.1rem 0.3rem', borderRadius: '3px' }}>data/</code> folder on this computer.
+                Nothing is sent to any server. You can export complete or partial backups in JSON format at any time for data portability or safe keeping.
+              </>
+            )}
           </div>
         </div>
 
