@@ -35,9 +35,9 @@ export const signUpWithEmail = async (email, password, businessName = '', planTi
     try {
       await supabase.from('organizations').upsert({
         owner_id: data.user.id,
-        name: businessName || 'My Business',
+        business_name: businessName || 'My Business',
         plan_tier: planTier,
-        subscription_status: null,
+        subscription_status: 'inactive',
         updated_at: new Date().toISOString(),
       });
       await supabase.from('profiles').upsert({
