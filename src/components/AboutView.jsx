@@ -1,4 +1,22 @@
-import { Building2, CheckCircle2, Code2, Github, ExternalLink } from 'lucide-react';
+import {
+  Building2,
+  CheckCircle2,
+  Code2,
+  Github,
+  ExternalLink,
+  FileText,
+  BarChart3,
+  QrCode,
+  Package,
+  Users,
+  Receipt,
+  Layers,
+  Database,
+  Lock,
+  ShieldCheck,
+  Sparkles,
+  Zap
+} from 'lucide-react';
 
 export default function AboutView() {
   return (
@@ -47,6 +65,182 @@ export default function AboutView() {
           <div style={{ background: 'var(--bg-secondary)', padding: '0.85rem 1rem', borderRadius: 8, border: '1px solid var(--border)' }}>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Compliance Engine</div>
             <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: 2 }}>India GST &amp; Multi-Currency</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Core Platform Capabilities */}
+      <div className="glass-panel p-6 mb-6" style={{ borderRadius: 12, border: '1px solid var(--border)' }}>
+        <div style={{ marginBottom: '1.25rem' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 0.35rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+            <Sparkles size={18} color="var(--primary)" /> Core Platform Capabilities
+          </h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+            Engineered specifically for Indian SMBs, accountants, freelancers, and growing enterprises.
+          </p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.9rem' }}>
+          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(var(--primary-rgb), 0.1)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <FileText size={17} />
+              </div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Smart GST Invoicing</div>
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+              Create Tax Invoices, Bills of Supply, Proformas, Quotations, and Credit/Debit Notes. Automatic CGST/SGST/IGST tax splits based on Place of Supply (POS) and Reverse Charge (RCM).
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(var(--primary-rgb), 0.1)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <BarChart3 size={17} />
+              </div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>GST Filing (GSTR-1, 3B, 2B)</div>
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+              One-click GSTR-1 JSON export ready for the official GST Portal (B2B, B2CL, B2CS, CDNR, EXP, HSN). Instant GSTR-3B tax summaries and GSTR-2B purchase reconciliation.
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(var(--primary-rgb), 0.1)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <QrCode size={17} />
+              </div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Dynamic UPI QR Payments</div>
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+              Embeds automated BharatQR / UPI dynamic payment codes on bills with exact invoice amounts. Customers scan to pay directly into your bank account with zero payment gateway fees.
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(var(--primary-rgb), 0.1)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Package size={17} />
+              </div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Inventory &amp; Barcode Suite</div>
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+              Track real-time stock levels, low-quantity alerts, batch numbers, and purchase vs. selling margins. Search across 50,000+ HSN/SAC codes with automated tax rate mapping.
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(var(--primary-rgb), 0.1)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Users size={17} />
+              </div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Client &amp; Vendor Ledger</div>
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+              Unified debtor and creditor records, auto-validation of 15-digit GSTINs, payment terms, outstanding balances, and direct 1-click invoice sharing via WhatsApp and email.
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(var(--primary-rgb), 0.1)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Receipt size={17} />
+              </div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Purchase Bills &amp; Smart OCR</div>
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+              Capture vendor invoices with intelligent OCR document scanning. Reconcile Input Tax Credit (ITC) eligibility, log expenses by category, and track company outflows effortlessly.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* End-to-End Business Lifecycle */}
+      <div className="glass-panel p-6 mb-6" style={{ borderRadius: 12, border: '1px solid var(--border)' }}>
+        <div style={{ marginBottom: '1.25rem' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 0.35rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+            <Layers size={18} color="var(--primary)" /> End-to-End Business Lifecycle
+          </h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+            From initial business configuration to GST portal tax return filing in four streamlined steps.
+          </p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.85rem' }}>
+          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Step 01</span>
+            <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)', margin: '0.35rem 0 0.35rem 0' }}>Profile Setup</div>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
+              Configure business legal name, GSTIN, PAN, bank details, brand logo, and digital signature once.
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Step 02</span>
+            <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)', margin: '0.35rem 0 0.35rem 0' }}>Generate Invoices</div>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
+              Add items with instant HSN lookup, auto-calculate CGST/SGST/IGST, and apply custom discounts.
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Step 03</span>
+            <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)', margin: '0.35rem 0 0.35rem 0' }}>Share &amp; Collect</div>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
+              Deliver PDF bills directly via WhatsApp or email with dynamic UPI QR codes for zero-fee payment settlements.
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Step 04</span>
+            <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)', margin: '0.35rem 0 0.35rem 0' }}>Reconcile &amp; File</div>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
+              Export GSTN-ready GSTR-1 JSON files, verify ITC in GSTR-2B, and review live P&amp;L reports.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Security, Privacy & Data Sovereignty */}
+      <div className="glass-panel p-6 mb-6" style={{ borderRadius: 12, border: '1px solid var(--border)' }}>
+        <div style={{ marginBottom: '1.25rem' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 0.35rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+            <ShieldCheck size={18} color="var(--primary)" /> Security, Privacy &amp; Data Sovereignty
+          </h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+            Your financial records are sensitive business assets. Billenza is built on strict data autonomy principles.
+          </p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.9rem' }}>
+          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', color: 'var(--primary)' }}>
+              <Database size={16} />
+              <span style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)' }}>Zero Vendor Lock-In</span>
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+              You own 100% of your business data. Perform complete JSON or Excel backups anytime with full schema transparency and restore anytime.
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', color: 'var(--primary)' }}>
+              <Zap size={16} />
+              <span style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)' }}>Offline-First Continuity</span>
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+              Network drops never interrupt bill generation. Billenza operates seamlessly offline and syncs transactions safely once connection returns.
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', color: 'var(--primary)' }}>
+              <Lock size={16} />
+              <span style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)' }}>Multi-Entity Isolation</span>
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+              Distinct business profiles maintain strict multi-tenant data separation for multiple GSTINs, bank accounts, and independent bookkeeping.
+            </p>
           </div>
         </div>
       </div>
