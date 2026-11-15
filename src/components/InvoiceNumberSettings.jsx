@@ -13,6 +13,7 @@ import {
   formatDocNumber, counterKeyFor, ownPrefixProblem, numberFormatProblem,
 } from '../utils';
 import { getPrintSettings } from '../utils/printSettings';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { toast } from './Toast';
 import { confirmAction } from './ConfirmModal';
 
@@ -52,8 +53,18 @@ const InvoiceNumberSettings = forwardRef(function InvoiceNumberSettings(
   // and the "are you sure" before jumping forward.
   useEffect(() => {
     const key = scope === 'own' ? counterKeyFor('INV', { own: true }, businessKey) : `counter_${override || 'INV'}`;
-    fetch(`/api/meta/${encodeURIComponent(key)}`)
-      .then((r) => r.json()).then((j) => setCounter(Number(j?.value) || 0)).catch(() => {});
+    if (isSupabaseConfigured()) {
+      supabase
+        .from('invoice_counters')
+        .select('value')
+        .eq('key', key)
+        .maybeSingle()
+        .then(({ data }) => setCounter(Number(data?.value) || 0))
+        .catch(() => {});
+    } else {
+      fetch(`/api/meta/${encodeURIComponent(key)}`)
+        .then((r) => r.json()).then((j) => setCounter(Number(j?.value) || 0)).catch(() => {});
+    }
   }, [scope, businessKey, override]);
 
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);

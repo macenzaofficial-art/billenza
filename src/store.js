@@ -240,11 +240,12 @@ export const setEnabledModules = (map) => {
 };
 
 // ---- Next Invoice Number ----
-export const getNextInvoiceNumber = async (prefix = 'INV', { peek = false, explicitPrefix = false, invoiceType = null, businessKey = '', invoiceDate = '' } = {}) => {
+export const getNextInvoiceNumber = async (prefix = 'INV', { peek = false, explicitPrefix = false, invoiceType = null, businessKey = '', invoiceDate = '', minStart = 1 } = {}) => {
   const settings = await getNumberSeries(businessKey);
   const typePrefix = settings.own ? (INVOICE_TYPES[invoiceType]?.prefix || prefix) : prefix;
   const key = counterKeyFor(typePrefix, settings, businessKey);
-  const start = invoiceType ? startFor(invoiceType, settings) : 1;
+  const baseStart = invoiceType ? startFor(invoiceType, settings) : 1;
+  const start = Math.max(Number(baseStart) || 1, Number(minStart) || 1);
   let next;
 
   if (isSupabaseConfigured()) {
@@ -289,6 +290,7 @@ export const getNextInvoiceNumber = async (prefix = 'INV', { peek = false, expli
 
 // ---- Bills ----
 export const saveBill = async (bill, { overwrite = false } = {}) => {
+  let savedResult;
   if (isSupabaseConfigured()) {
     const row = {
       id: bill.id,
@@ -320,11 +322,50 @@ export const saveBill = async (bill, { overwrite = false } = {}) => {
       }
       throw error;
     }
-    return bill;
+    savedResult = bill;
+  } else {
+    const qs = overwrite ? '?overwrite=1' : '';
+    savedResult = await apiFetch(`${API}/bills${qs}`, { method: 'POST', body: JSON.stringify(bill) });
   }
 
-  const qs = overwrite ? '?overwrite=1' : '';
-  return apiFetch(`${API}/bills${qs}`, { method: 'POST', body: JSON.stringify(bill) });
+  // Ensure counter in invoice_counters / meta doesn't lag behind this saved bill number
+  try {
+    const numStr = String(bill.invoiceNumber || bill.id || '');
+    const m = numStr.match(/(\d+)\s*$/);
+    if (m) {
+      const suffix = parseInt(m[1], 10);
+      if (Number.isFinite(suffix) && suffix > 0) {
+        const bizKey = businessKeyOf(bill.data?.profile || { gstin: bill.customer?.gstin });
+        getNumberSeries(bizKey).then((settings) => {
+          const typePrefix = settings.own ? (INVOICE_TYPES[bill.invoiceType]?.prefix || 'INV') : (INVOICE_TYPES[bill.invoiceType]?.prefix || 'INV');
+          const key = counterKeyFor(typePrefix, settings, bizKey);
+          if (isSupabaseConfigured()) {
+            supabase
+              .from('invoice_counters')
+              .select('value')
+              .eq('key', key)
+              .maybeSingle()
+              .then(({ data }) => {
+                if (!data || Number(data.value || 0) < suffix) {
+                  supabase.rpc('increment_counter', { key, start: suffix }).catch(() => {});
+                }
+              })
+              .catch(() => {});
+          } else {
+            apiFetch(`${API}/meta/${encodeURIComponent(key)}`)
+              .then(({ value: current }) => {
+                if (Number(current || 0) < suffix) {
+                  apiFetch(`${API}/meta/${encodeURIComponent(key)}`, { method: 'POST', body: JSON.stringify({ value: suffix }) }).catch(() => {});
+                }
+              })
+              .catch(() => {});
+          }
+        }).catch(() => {});
+      }
+    }
+  } catch { /* non-blocking */ }
+
+  return savedResult;
 };
 
 export const getAllBills = async () => {

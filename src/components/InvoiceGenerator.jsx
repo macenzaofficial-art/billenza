@@ -1921,12 +1921,37 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
           const prefix = overridePrefix || INVOICE_TYPES[invoiceType]?.prefix || 'INV';
           let nextNum = bill.id;
           let success = false;
-          // Each try moves the counter on for good, so this walks past a run of
-          // numbers taken by a CSV import or a restore once, then never again.
-          // ponytail: one local request pair per taken number; fine up to ~1000.
-          for (let i = 0; i < 1000; i++) {
+
+          // Fast-forward past any taken numbers in one shot instead of
+          // walking 1-by-1 over the network.
+          let minFree = 1;
+          try {
+            const allBills = await getAllBills();
+            const pUpper = prefix.toUpperCase();
+            for (const b of allBills) {
+              const numStr = String(b.invoiceNumber || b.id || '').trim();
+              const m = numStr.match(/(\d+)\s*$/);
+              if (m) {
+                const s = parseInt(m[1], 10);
+                if (Number.isFinite(s) && s >= minFree) {
+                  const upper = numStr.toUpperCase();
+                  if (upper.startsWith(pUpper) || upper.includes(`/${pUpper}/`) || upper.includes(`${pUpper}-`)) {
+                    minFree = s + 1;
+                  }
+                }
+              }
+            }
+          } catch { /* fallback to sequential increment if bills fetch fails */ }
+
+          for (let i = 0; i < 20; i++) {
             try {
-              nextNum = await getNextInvoiceNumber(prefix, { explicitPrefix: !!overridePrefix, invoiceType, businessKey: businessKeyOf(profile), invoiceDate: details.invoiceDate });
+              nextNum = await getNextInvoiceNumber(prefix, {
+                explicitPrefix: !!overridePrefix,
+                invoiceType,
+                businessKey: businessKeyOf(profile),
+                invoiceDate: details.invoiceDate,
+                minStart: minFree,
+              });
               const retryBill = { ...bill, id: nextNum, invoiceNumber: nextNum };
               retryBill.data = { ...retryBill.data, details: { ...retryBill.data.details, invoiceNumber: nextNum } };
               await saveBill(retryBill, { overwrite: false });
@@ -1943,11 +1968,11 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
               break;
             } catch (retryErr) {
               if (retryErr?.status !== 409) throw retryErr;
-              // else: number still taken, loop and try again with next counter.
+              minFree++;
             }
           }
           if (!success) {
-            toast(`Could not find a free invoice number after 1000 attempts. Please change the number manually.`, 'error');
+            toast(`Could not find a free invoice number. Please change the number manually.`, 'error');
             return null;
           }
         } else {

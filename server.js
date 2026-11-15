@@ -247,6 +247,22 @@ app.post('/api/bills', (req, res) => {
     });
   }
   writeJSON(filePath, bill);
+  try {
+    const num = String(bill.invoiceNumber || bill.id || '');
+    const m = num.match(/^([A-Z]+)[\W_].*?(\d+)\s*$/i);
+    if (m) {
+      const prefix = m[1].toUpperCase();
+      const suffix = parseInt(m[2], 10);
+      if (Number.isFinite(suffix) && suffix > 0) {
+        const meta = readJSON(META_PATH, {});
+        const key = `counter_${prefix}`;
+        if (suffix > (Number(meta[key]) || 0)) {
+          meta[key] = suffix;
+          writeJSON(META_PATH, meta);
+        }
+      }
+    }
+  } catch { /* non-blocking */ }
   res.json({ success: true });
 });
 
@@ -764,14 +780,22 @@ app.post('/api/import', (req, res) => {
   // For every bill just imported (or already on disk), extract the numeric
   // suffix from its invoice number. Bump each `counter_<PREFIX>` in meta
   // to at least max(existing) so the next reservation doesn't collide.
+  reconcileInvoiceCounters();
+
+  res.json({ ...counts, hasProfile: !!data.profile });
+});
+
+function reconcileInvoiceCounters() {
   try {
     const meta = readJSON(META_PATH, {});
-    const billFiles = fs.readdirSync(path.join(DATA_DIR, 'bills')).filter(f => f.endsWith('.json'));
+    const billsDir = path.join(DATA_DIR, 'bills');
+    if (!fs.existsSync(billsDir)) return;
+    const billFiles = fs.readdirSync(billsDir).filter(f => f.endsWith('.json'));
     const maxByPrefix = {};
     const maxByKey = {};
     for (const f of billFiles) {
       let bill;
-      try { bill = readJSON(path.join(DATA_DIR, 'bills', f), null); } catch { continue; }
+      try { bill = readJSON(path.join(billsDir, f), null); } catch { continue; }
       const num = String(bill?.invoiceNumber || bill?.id || '');
       // Extract prefix + last numeric suffix (e.g. INV/2026-27/0007 → prefix INV, suffix 7)
       const m = num.match(/^([A-Z]+)[\W_].*?(\d+)\s*$/i);
@@ -807,11 +831,9 @@ app.post('/api/import', (req, res) => {
     }
     if (metaChanged) writeJSON(META_PATH, meta);
   } catch (err) {
-    console.error('Post-import counter reconciliation failed:', err);
+    console.error('Counter reconciliation failed:', err);
   }
-
-  res.json({ ...counts, hasProfile: !!data.profile });
-});
+}
 
 // ========================
 // Save PDF to local folder
@@ -1777,6 +1799,7 @@ function startServer(port) {
     try { fs.writeFileSync(PORT_FILE, String(port), 'utf-8'); } catch { /* ignore */ }
     console.log(`\n  Free GST Billing Software running at http://localhost:${port}`);
     console.log(`  Data stored in: ${DATA_DIR}\n`);
+    try { reconcileInvoiceCounters(); } catch { /* non-blocking */ }
   });
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE' && port < STARTING_PORT + MAX_PORT_SCAN) {
